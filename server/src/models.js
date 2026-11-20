@@ -1,16 +1,38 @@
+
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['student', 'admin'], default: 'student' }
+  role: { type: String, enum: ['student', 'admin'], default: 'student' },
+
+  profile: {
+    type: new mongoose.Schema({
+      photoUrl: { type: String, default: '' },
+      fullName: { type: String, default: '' },
+      mobile: { type: String, default: '' },
+      studentId: { type: String, default: '' },
+      course: { type: String, default: '' },
+      branch: { type: String, default: '' },
+      specialization: { type: String, default: '' },
+      department: { type: String, default: '' },
+      year: { type: String, default: '' },
+      semester: { type: String, default: '' }
+    }, { _id: false }),
+    default: () => ({})
+  }
+
 }, { timestamps: true });
 
 const materialSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
-  type: { type: String, enum: ['Notes', 'PYQ', 'Assignment', 'Practical', 'Question Bank', 'Syllabus', 'Other'], required: true },
+  type: {
+    type: String,
+    enum: ['Notes', 'PYQ', 'Assignment', 'Practical', 'Question Bank', 'Syllabus', 'Other'],
+    required: true
+  },
   department: { type: String, default: 'Computer Science & Engineering' },
   semester: { type: Number, min: 1, max: 8, required: true },
   subject: { type: String, required: true, trim: true },
