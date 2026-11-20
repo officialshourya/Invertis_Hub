@@ -13,7 +13,9 @@ import {
 import ProfilePage from './ProfilePage.jsx';
 import { AcademicPages } from './AcademicPages.jsx';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API = (
+  import.meta.env.VITE_API_URL || 'http://localhost:5000'
+).replace(/\/+$/, '');
 
 const TYPES = [
   'Notes', 'PYQ', 'Assignment', 'Practical',
@@ -27,7 +29,7 @@ const navItems = [
   { id: 'materials', label: 'Study Materials', icon: BookOpen, section: 'ACADEMICS' },
   { id: 'pyq', label: 'PYQ Papers', icon: FileText, section: 'ACADEMICS' },
   { id: 'assignments', label: 'Assignments', icon: ClipboardList, section: 'ACADEMICS' },
-  { id: 'practicals', label: 'Practical Hub', icon: FlaskSinIcon, section: 'ACADEMICS' },
+  { id: 'practicals', label: 'Practical Hub', icon: FlaskConical, section: 'ACADEMICS' },
   { id: 'questions', label: 'Question Bank', icon: HelpCircle, section: 'ACADEMICS' },
   { id: 'quizzes', label: 'Quiz Arena', icon: Trophy, section: 'ACADEMICS' },
 
@@ -42,14 +44,28 @@ const navItems = [
   { id: 'users', label: 'Users', icon: Users, section: 'ADMIN', admin: true }
 ];
 
-// Alias keeps the icon reference clear.
-const FlaskSinIcon = FlaskConical;
-
 function App() {
-  const [token, setToken] = useState(localStorage.getItem('ih_token') || '');
-  const [user, setUser] = useState(
-    JSON.parse(localStorage.getItem('ih_user') || 'null')
-  );
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem('ih_token') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('ih_user') || 'null');
+    } catch {
+      try {
+        localStorage.removeItem('ih_user');
+        localStorage.removeItem('ih_token');
+      } catch {
+        // Storage may be unavailable.
+      }
+      return null;
+    }
+  });
 
   const [view, setView] = useState('home');
   const [active, setActive] = useState('overview');
@@ -89,7 +105,7 @@ function App() {
   });
 
   const headers = useMemo(
-    () => ({ Authorization: `Bearer ${token}` }),
+    () => token ? { Authorization: `Bearer ${token}` } : {},
     [token]
   );
 
@@ -109,14 +125,18 @@ function App() {
   }, [materials, active]);
 
   const request = async (url, options = {}) => {
+    const isFormData =
+      typeof FormData !== 'undefined' &&
+      options.body instanceof FormData;
+
     const response = await fetch(`${API}${url}`, {
       ...options,
       headers: {
-        ...(options.body instanceof FormData
-          ? {}
-          : { 'Content-Type': 'application/json' }),
+        ...(!isFormData && options.body
+          ? { 'Content-Type': 'application/json' }
+          : {}),
         ...(options.headers || {}),
-        ...(token ? headers : {})
+        ...headers
       }
     });
 
@@ -175,10 +195,10 @@ function App() {
   }, [token, user]);
 
   useEffect(() => {
-    if (notice) {
-      const t = setTimeout(() => setNotice(''), 4500);
-      return () => clearTimeout(t);
-    }
+    if (!notice) return;
+
+    const t = setTimeout(() => setNotice(''), 4500);
+    return () => clearTimeout(t);
   }, [notice]);
 
   const login = async (e) => {
@@ -224,12 +244,21 @@ function App() {
     };
 
     setUser(updated);
-    localStorage.setItem('ih_user', JSON.stringify(updated));
+
+    try {
+      localStorage.setItem('ih_user', JSON.stringify(updated));
+    } catch {
+      setNotice('Profile updated, but local session storage could not be updated.');
+    }
   };
 
   const logout = () => {
-    localStorage.removeItem('ih_token');
-    localStorage.removeItem('ih_user');
+    try {
+      localStorage.removeItem('ih_token');
+      localStorage.removeItem('ih_user');
+    } catch {
+      // Continue with in-memory logout.
+    }
 
     setToken('');
     setUser(null);
@@ -318,7 +347,7 @@ function App() {
   };
 
   const deleteMaterial = async (item) => {
-    if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+    if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) {
       return;
     }
 
@@ -1380,7 +1409,11 @@ function UsersPage({ users }) {
                       {u.role}
                     </span>
                   </td>
-                  <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
+                  <td>
+                    {u.createdAt
+                      ? new Date(u.createdAt).toLocaleDateString()
+                      : '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>
