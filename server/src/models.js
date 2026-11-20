@@ -1,6 +1,8 @@
 
 import mongoose from 'mongoose';
 
+const ObjectId = mongoose.Schema.Types.ObjectId;
+
 // ==========================================
 // USER MODEL
 // ==========================================
@@ -20,7 +22,6 @@ const userSchema = new mongoose.Schema({
     enum: ['student', 'admin'],
     default: 'student'
   },
-
   profile: {
     type: new mongoose.Schema({
       photoUrl: { type: String, default: '' },
@@ -37,6 +38,306 @@ const userSchema = new mongoose.Schema({
     default: () => ({})
   }
 }, { timestamps: true });
+
+// ==========================================
+// DEPARTMENT MODEL
+// ==========================================
+
+const departmentSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  code: { type: String, trim: true, uppercase: true, default: '' },
+  description: { type: String, default: '' },
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+departmentSchema.index({ name: 1 }, { unique: true });
+
+// ==========================================
+// COURSE MODEL
+// ==========================================
+
+const courseSchema = new mongoose.Schema({
+  department: {
+    type: ObjectId,
+    ref: 'Department',
+    required: true
+  },
+  name: { type: String, required: true, trim: true },
+  code: { type: String, trim: true, uppercase: true, default: '' },
+  description: { type: String, default: '' },
+  durationYears: { type: Number, min: 1, max: 10, default: 4 },
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+courseSchema.index({ department: 1, name: 1 }, { unique: true });
+
+// ==========================================
+// BRANCH MODEL
+// ==========================================
+
+const branchSchema = new mongoose.Schema({
+  department: {
+    type: ObjectId,
+    ref: 'Department',
+    required: true
+  },
+  course: {
+    type: ObjectId,
+    ref: 'Course',
+    required: true
+  },
+  name: { type: String, required: true, trim: true },
+  code: { type: String, trim: true, uppercase: true, default: '' },
+  description: { type: String, default: '' },
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+branchSchema.index(
+  { course: 1, name: 1 },
+  { unique: true }
+);
+
+// ==========================================
+// SPECIALIZATION MODEL
+// ==========================================
+
+const specializationSchema = new mongoose.Schema({
+  department: {
+    type: ObjectId,
+    ref: 'Department',
+    required: true
+  },
+  course: {
+    type: ObjectId,
+    ref: 'Course',
+    required: true
+  },
+  branch: {
+    type: ObjectId,
+    ref: 'Branch',
+    default: null
+  },
+  name: { type: String, required: true, trim: true },
+  code: { type: String, trim: true, uppercase: true, default: '' },
+  description: { type: String, default: '' },
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+specializationSchema.index(
+  { course: 1, branch: 1, name: 1 },
+  { unique: true }
+);
+
+// ==========================================
+// ACADEMIC YEAR MODEL
+// ==========================================
+
+const academicYearSchema = new mongoose.Schema({
+  department: {
+    type: ObjectId,
+    ref: 'Department',
+    required: true
+  },
+  course: {
+    type: ObjectId,
+    ref: 'Course',
+    required: true
+  },
+  branch: {
+    type: ObjectId,
+    ref: 'Branch',
+    default: null
+  },
+  specialization: {
+    type: ObjectId,
+    ref: 'Specialization',
+    default: null
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  yearNumber: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 10
+  },
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+academicYearSchema.index(
+  { course: 1, branch: 1, specialization: 1, yearNumber: 1 },
+  { unique: true }
+);
+
+// ==========================================
+// SEMESTER MODEL
+// ==========================================
+
+const semesterSchema = new mongoose.Schema({
+  department: {
+    type: ObjectId,
+    ref: 'Department',
+    required: true
+  },
+  course: {
+    type: ObjectId,
+    ref: 'Course',
+    required: true
+  },
+  branch: {
+    type: ObjectId,
+    ref: 'Branch',
+    default: null
+  },
+  specialization: {
+    type: ObjectId,
+    ref: 'Specialization',
+    default: null
+  },
+  academicYear: {
+    type: ObjectId,
+    ref: 'AcademicYear',
+    required: true
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  semesterNumber: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 8
+  },
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+semesterSchema.index(
+  { academicYear: 1, semesterNumber: 1 },
+  { unique: true }
+);
+
+// ==========================================
+// SUBJECT MODEL
+// ==========================================
+
+const subjectSchema = new mongoose.Schema({
+  department: {
+    type: ObjectId,
+    ref: 'Department',
+    required: true
+  },
+  course: {
+    type: ObjectId,
+    ref: 'Course',
+    required: true
+  },
+  branch: {
+    type: ObjectId,
+    ref: 'Branch',
+    default: null
+  },
+  specialization: {
+    type: ObjectId,
+    ref: 'Specialization',
+    default: null
+  },
+  academicYear: {
+    type: ObjectId,
+    ref: 'AcademicYear',
+    required: true
+  },
+  semester: {
+    type: ObjectId,
+    ref: 'Semester',
+    required: true
+  },
+  name: { type: String, required: true, trim: true },
+  code: { type: String, trim: true, uppercase: true, default: '' },
+  description: { type: String, default: '' },
+  credits: { type: Number, min: 0, default: 0 },
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+subjectSchema.index(
+  { semester: 1, name: 1 },
+  { unique: true }
+);
+
+// ==========================================
+// UNIT / TOPIC MODEL
+// ==========================================
+
+const unitSchema = new mongoose.Schema({
+  department: {
+    type: ObjectId,
+    ref: 'Department',
+    required: true
+  },
+  course: {
+    type: ObjectId,
+    ref: 'Course',
+    required: true
+  },
+  branch: {
+    type: ObjectId,
+    ref: 'Branch',
+    default: null
+  },
+  specialization: {
+    type: ObjectId,
+    ref: 'Specialization',
+    default: null
+  },
+  academicYear: {
+    type: ObjectId,
+    ref: 'AcademicYear',
+    required: true
+  },
+  semester: {
+    type: ObjectId,
+    ref: 'Semester',
+    required: true
+  },
+  subject: {
+    type: ObjectId,
+    ref: 'Subject',
+    required: true
+  },
+  name: { type: String, required: true, trim: true },
+  description: { type: String, default: '' },
+  unitNumber: { type: Number, min: 1, default: 1 },
+  topics: [{
+    type: String,
+    trim: true
+  }],
+  isActive: { type: Boolean, default: true },
+  sortOrder: { type: Number, default: 0 },
+  createdBy: { type: ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+unitSchema.index(
+  { subject: 1, unitNumber: 1 },
+  { unique: true }
+);
 
 // ==========================================
 // ACADEMIC MATERIAL MODEL
@@ -58,6 +359,8 @@ const materialSchema = new mongoose.Schema({
     ],
     required: true
   },
+
+  // Legacy fields preserved
   department: {
     type: String,
     default: 'Computer Science & Engineering'
@@ -66,15 +369,37 @@ const materialSchema = new mongoose.Schema({
   subject: { type: String, required: true, trim: true },
   unit: { type: String, default: '' },
   year: { type: String, default: '' },
+
+  // New dynamic catalog references
+  departmentRef: { type: ObjectId, ref: 'Department', default: null },
+  courseRef: { type: ObjectId, ref: 'Course', default: null },
+  branchRef: { type: ObjectId, ref: 'Branch', default: null },
+  specializationRef: {
+    type: ObjectId,
+    ref: 'Specialization',
+    default: null
+  },
+  academicYearRef: {
+    type: ObjectId,
+    ref: 'AcademicYear',
+    default: null
+  },
+  semesterRef: { type: ObjectId, ref: 'Semester', default: null },
+  subjectRef: { type: ObjectId, ref: 'Subject', default: null },
+  unitRef: { type: ObjectId, ref: 'Unit', default: null },
+
   originalName: String,
   storedName: String,
   mimeType: String,
   size: Number,
   uploadedBy: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User'
   }
 }, { timestamps: true });
+
+materialSchema.index({ departmentRef: 1, courseRef: 1, semesterRef: 1 });
+materialSchema.index({ subjectRef: 1, unitRef: 1 });
 
 // ==========================================
 // QUIZ MODEL
@@ -143,7 +468,7 @@ const quizSchema = new mongoose.Schema({
     default: 'draft'
   },
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   }
@@ -155,17 +480,17 @@ const quizSchema = new mongoose.Schema({
 
 const quizAttemptSchema = new mongoose.Schema({
   quiz: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'Quiz',
     required: true
   },
   student: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   },
   answers: [{
-    questionId: mongoose.Schema.Types.ObjectId,
+    questionId: ObjectId,
     selectedOption: {
       type: Number,
       min: 0
@@ -193,12 +518,12 @@ quizAttemptSchema.index({ quiz: 1, student: 1, createdAt: -1 });
 
 const bookmarkSchema = new mongoose.Schema({
   student: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   },
   material: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'Material',
     required: true
   }
@@ -215,7 +540,7 @@ bookmarkSchema.index(
 
 const studentNoteSchema = new mongoose.Schema({
   student: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   },
@@ -244,7 +569,7 @@ studentNoteSchema.index({ student: 1, updatedAt: -1 });
 
 const plannerTaskSchema = new mongoose.Schema({
   student: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   },
@@ -281,7 +606,7 @@ plannerTaskSchema.index({ student: 1, dueDate: 1 });
 
 const discussionReplySchema = new mongoose.Schema({
   author: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   },
@@ -296,7 +621,7 @@ const discussionReplySchema = new mongoose.Schema({
 
 const discussionSchema = new mongoose.Schema({
   author: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   },
@@ -356,7 +681,7 @@ const announcementSchema = new mongoose.Schema({
   },
   published: { type: Boolean, default: false },
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   }
@@ -368,7 +693,7 @@ const announcementSchema = new mongoose.Schema({
 
 const notificationSchema = new mongoose.Schema({
   recipient: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     ref: 'User',
     required: true
   },
@@ -394,7 +719,7 @@ const notificationSchema = new mongoose.Schema({
     default: 'system'
   },
   relatedId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: ObjectId,
     default: null
   },
   isRead: { type: Boolean, default: false }
@@ -406,14 +731,44 @@ notificationSchema.index({ recipient: 1, isRead: 1, createdAt: -1 });
 // SAFE MODEL EXPORTS
 // ==========================================
 
-// Existing models remain unchanged.
 export const User =
   mongoose.models.User || mongoose.model('User', userSchema);
+
+export const Department =
+  mongoose.models.Department ||
+  mongoose.model('Department', departmentSchema);
+
+export const Course =
+  mongoose.models.Course ||
+  mongoose.model('Course', courseSchema);
+
+export const Branch =
+  mongoose.models.Branch ||
+  mongoose.model('Branch', branchSchema);
+
+export const Specialization =
+  mongoose.models.Specialization ||
+  mongoose.model('Specialization', specializationSchema);
+
+export const AcademicYear =
+  mongoose.models.AcademicYear ||
+  mongoose.model('AcademicYear', academicYearSchema);
+
+export const Semester =
+  mongoose.models.Semester ||
+  mongoose.model('Semester', semesterSchema);
+
+export const Subject =
+  mongoose.models.Subject ||
+  mongoose.model('Subject', subjectSchema);
+
+export const Unit =
+  mongoose.models.Unit ||
+  mongoose.model('Unit', unitSchema);
 
 export const Material =
   mongoose.models.Material || mongoose.model('Material', materialSchema);
 
-// New academic feature models.
 export const Quiz =
   mongoose.models.Quiz || mongoose.model('Quiz', quizSchema);
 
