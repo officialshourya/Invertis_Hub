@@ -1320,3 +1320,5 @@ function UsersPage({ users }) {
 }
 
 export default App;
+
+import { AcademicPages } from './AcademicPages.jsx';
