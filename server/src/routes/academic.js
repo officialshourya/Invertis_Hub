@@ -1,4 +1,3 @@
-
 import express from 'express';
 import mongoose from 'mongoose';
 
@@ -12,7 +11,15 @@ import {
   PlannerTask,
   Discussion,
   Announcement,
-  Notification
+  Notification,
+  Department,
+  Course,
+  Branch,
+  Specialization,
+  AcademicYear,
+  Semester,
+  Subject,
+  Unit
 } from '../models.js';
 
 import { authenticate, requireAdmin } from '../middleware.js';
@@ -21,21 +28,16 @@ const router = express.Router();
 
 router.use(authenticate);
 
+// ==========================================
+// COMMON HELPERS
+// ==========================================
+
 const validId = id => mongoose.isValidObjectId(id);
 
 const getStudentId = req => req.user._id;
 
-const cleanQuiz = quiz => {
-  const data = quiz.toObject ? quiz.toObject() : { ...quiz };
-
-  data.questions = (data.questions || []).map(question => {
-    const item = { ...question };
-    delete item.correctAnswer;
-    return item;
-  });
-
-  return data;
-};
+const safeText = (value, max = 5000) =>
+  typeof value === 'string' ? value.trim().slice(0, max) : '';
 
 const validSemester = value =>
   value === null ||
@@ -45,13 +47,724 @@ const validSemester = value =>
     Number(value) >= 1 &&
     Number(value) <= 8);
 
-const safeText = (value, max = 5000) =>
-  typeof value === 'string' ? value.trim().slice(0, max) : '';
+const escapeRegex = value =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const handleError = (res, error, message = 'Request failed.') => {
   console.error(error);
+
+  if (error.code === 11000) {
+    return res.status(409).json({
+      message: 'This record already exists.'
+    });
+  }
+
+  if (
+    error.name === 'ValidationError' ||
+    error.name === 'CastError'
+  ) {
+    return res.status(400).json({
+      message: error.message
+    });
+  }
+
   return res.status(500).json({ message });
 };
+
+const cleanQuiz = quiz => {
+  const data = quiz.toObject ? quiz.toObject() : { ...quiz };
+
+  data.questions = (data.questions || []).map(question => {
+    const item = { ...question };
+    delete item.correctAnswer;
+    delete item.explanation;
+    return item;
+  });
+
+  return data;
+};
+
+// ==========================================
+// DYNAMIC ACADEMIC CATALOG
+// ==========================================
+
+const catalogModels = {
+  departments: {
+    Model: Department,
+    fields: [
+      'name',
+      'code',
+      'description',
+      'isActive',
+      'sortOrder'
+    ],
+    required: ['name'],
+    parents: [],
+    populate: []
+  },
+
+  courses: {
+    Model: Course,
+    fields: [
+      'department',
+      'name',
+      'code',
+      'description',
+      'durationYears',
+      'isActive',
+      'sortOrder'
+    ],
+    required: ['department', 'name'],
+    parents: [
+      { field: 'department', Model: Department }
+    ],
+    populate: ['department']
+  },
+
+  branches: {
+    Model: Branch,
+    fields: [
+      'department',
+      'course',
+      'name',
+      'code',
+      'description',
+      'isActive',
+      'sortOrder'
+    ],
+    required: ['department', 'course', 'name'],
+    parents: [
+      { field: 'department', Model: Department },
+      { field: 'course', Model: Course }
+    ],
+    populate: ['department', 'course']
+  },
+
+  specializations: {
+    Model: Specialization,
+    fields: [
+      'department',
+      'course',
+      'branch',
+      'name',
+      'code',
+      'description',
+      'isActive',
+      'sortOrder'
+    ],
+    required: ['department', 'course', 'name'],
+    parents: [
+      { field: 'department', Model: Department },
+      { field: 'course', Model: Course },
+      { field: 'branch', Model: Branch, optional: true }
+    ],
+    populate: ['department', 'course', 'branch']
+  },
+
+  'academic-years': {
+    Model: AcademicYear,
+    fields: [
+      'department',
+      'course',
+      'branch',
+      'specialization',
+      'name',
+      'yearNumber',
+      'isActive',
+      'sortOrder'
+    ],
+    required: [
+      'department',
+      'course',
+      'name',
+      'yearNumber'
+    ],
+    parents: [
+      { field: 'department', Model: Department },
+      { field: 'course', Model: Course },
+      { field: 'branch', Model: Branch, optional: true },
+      {
+        field: 'specialization',
+        Model: Specialization,
+        optional: true
+      }
+    ],
+    populate: [
+      'department',
+      'course',
+      'branch',
+      'specialization'
+    ]
+  },
+
+  semesters: {
+    Model: Semester,
+    fields: [
+      'department',
+      'course',
+      'branch',
+      'specialization',
+      'academicYear',
+      'name',
+      'semesterNumber',
+      'isActive',
+      'sortOrder'
+    ],
+    required: [
+      'department',
+      'course',
+      'academicYear',
+      'name',
+      'semesterNumber'
+    ],
+    parents: [
+      { field: 'department', Model: Department },
+      { field: 'course', Model: Course },
+      { field: 'branch', Model: Branch, optional: true },
+      {
+        field: 'specialization',
+        Model: Specialization,
+        optional: true
+      },
+      { field: 'academicYear', Model: AcademicYear }
+    ],
+    populate: [
+      'department',
+      'course',
+      'branch',
+      'specialization',
+      'academicYear'
+    ]
+  },
+
+  subjects: {
+    Model: Subject,
+    fields: [
+      'department',
+      'course',
+      'branch',
+      'specialization',
+      'academicYear',
+      'semester',
+      'name',
+      'code',
+      'description',
+      'credits',
+      'isActive',
+      'sortOrder'
+    ],
+    required: [
+      'department',
+      'course',
+      'academicYear',
+      'semester',
+      'name'
+    ],
+    parents: [
+      { field: 'department', Model: Department },
+      { field: 'course', Model: Course },
+      { field: 'branch', Model: Branch, optional: true },
+      {
+        field: 'specialization',
+        Model: Specialization,
+        optional: true
+      },
+      { field: 'academicYear', Model: AcademicYear },
+      { field: 'semester', Model: Semester }
+    ],
+    populate: [
+      'department',
+      'course',
+      'branch',
+      'specialization',
+      'academicYear',
+      'semester'
+    ]
+  },
+
+  units: {
+    Model: Unit,
+    fields: [
+      'department',
+      'course',
+      'branch',
+      'specialization',
+      'academicYear',
+      'semester',
+      'subject',
+      'name',
+      'description',
+      'unitNumber',
+      'topics',
+      'isActive',
+      'sortOrder'
+    ],
+    required: [
+      'department',
+      'course',
+      'academicYear',
+      'semester',
+      'subject',
+      'name'
+    ],
+    parents: [
+      { field: 'department', Model: Department },
+      { field: 'course', Model: Course },
+      { field: 'branch', Model: Branch, optional: true },
+      {
+        field: 'specialization',
+        Model: Specialization,
+        optional: true
+      },
+      { field: 'academicYear', Model: AcademicYear },
+      { field: 'semester', Model: Semester },
+      { field: 'subject', Model: Subject }
+    ],
+    populate: [
+      'department',
+      'course',
+      'branch',
+      'specialization',
+      'academicYear',
+      'semester',
+      'subject'
+    ]
+  }
+};
+
+const getCatalogConfig = type => catalogModels[type] || null;
+
+const prepareCatalogData = (config, body) => {
+  const data = {};
+
+  for (const field of config.fields) {
+    if (body[field] === undefined) continue;
+
+    const value = body[field];
+
+    if (
+      ['name', 'code', 'description'].includes(field)
+    ) {
+      data[field] = safeText(
+        value,
+        field === 'description' ? 3000 : 200
+      );
+    } else if (
+      [
+        'department',
+        'course',
+        'branch',
+        'specialization',
+        'academicYear',
+        'semester',
+        'subject'
+      ].includes(field)
+    ) {
+      data[field] = value || null;
+    } else if (
+      [
+        'durationYears',
+        'yearNumber',
+        'semesterNumber',
+        'unitNumber',
+        'credits',
+        'sortOrder'
+      ].includes(field)
+    ) {
+      data[field] = Number(value);
+    } else if (field === 'topics') {
+      data[field] = Array.isArray(value)
+        ? value.map(topic => safeText(topic, 300))
+        : value;
+    } else {
+      data[field] = value;
+    }
+  }
+
+  return data;
+};
+
+const validateCatalogData = async (config, data) => {
+  for (const field of config.required) {
+    if (
+      data[field] === undefined ||
+      data[field] === null ||
+      data[field] === ''
+    ) {
+      return `${field} is required.`;
+    }
+  }
+
+  for (const parent of config.parents) {
+    const value = data[parent.field];
+
+    if (!value && parent.optional) continue;
+
+    if (!value || !validId(value)) {
+      return `Invalid ${parent.field}.`;
+    }
+
+    const exists = await parent.Model.exists({
+      _id: value
+    });
+
+    if (!exists) {
+      return `${parent.field} was not found.`;
+    }
+  }
+
+  const numericRules = {
+    durationYears: [1, 10],
+    yearNumber: [1, 10],
+    semesterNumber: [1, 8],
+    unitNumber: [1, 100],
+    credits: [0, 100],
+    sortOrder: [0, 100000]
+  };
+
+  for (const [field, range] of Object.entries(numericRules)) {
+    if (data[field] === undefined) continue;
+
+    const number = Number(data[field]);
+
+    if (
+      !Number.isFinite(number) ||
+      number < range[0] ||
+      number > range[1]
+    ) {
+      return `Invalid ${field}.`;
+    }
+
+    if (
+      ['yearNumber', 'semesterNumber', 'unitNumber', 'sortOrder']
+        .includes(field) &&
+      !Number.isInteger(number)
+    ) {
+      return `${field} must be a whole number.`;
+    }
+  }
+
+  if (
+    data.isActive !== undefined &&
+    typeof data.isActive !== 'boolean'
+  ) {
+    return 'isActive must be true or false.';
+  }
+
+  if (
+    data.topics !== undefined &&
+    (
+      !Array.isArray(data.topics) ||
+      data.topics.length > 100
+    )
+  ) {
+    return 'Invalid topics list.';
+  }
+
+  return null;
+};
+
+const populateCatalog = (query, config) => {
+  for (const field of config.populate) {
+    query = query.populate(field);
+  }
+
+  return query;
+};
+
+// Get catalog overview
+router.get('/catalog', async (req, res) => {
+  try {
+    const includeInactive = req.user.role === 'admin';
+
+    const filter = includeInactive
+      ? {}
+      : { isActive: true };
+
+    const [
+      departments,
+      courses,
+      branches,
+      specializations,
+      years,
+      semesters,
+      subjects,
+      units
+    ] = await Promise.all([
+      Department.find(filter).sort({ sortOrder: 1, name: 1 }),
+      Course.find(filter).populate('department').sort({ sortOrder: 1, name: 1 }),
+      Branch.find(filter).populate('department course').sort({ sortOrder: 1, name: 1 }),
+      Specialization.find(filter).populate('department course branch').sort({ sortOrder: 1, name: 1 }),
+      AcademicYear.find(filter).populate('department course branch specialization').sort({ sortOrder: 1, yearNumber: 1 }),
+      Semester.find(filter).populate('department course academicYear').sort({ sortOrder: 1, semesterNumber: 1 }),
+      Subject.find(filter).populate('department course academicYear semester').sort({ sortOrder: 1, name: 1 }),
+      Unit.find(filter).populate('department course academicYear semester subject').sort({ sortOrder: 1, unitNumber: 1 })
+    ]);
+
+    res.json({
+      departments,
+      courses,
+      branches,
+      specializations,
+      years,
+      semesters,
+      subjects,
+      units
+    });
+  } catch (error) {
+    handleError(res, error, 'Could not load academic catalog.');
+  }
+});
+
+// List catalog records
+router.get('/catalog/:type', async (req, res) => {
+  try {
+    const config = getCatalogConfig(req.params.type);
+
+    if (!config) {
+      return res.status(404).json({
+        message: 'Invalid catalog category.'
+      });
+    }
+
+    const filter = {};
+
+    if (req.user.role !== 'admin') {
+      filter.isActive = true;
+    } else if (req.query.isActive !== undefined) {
+      if (!['true', 'false'].includes(req.query.isActive)) {
+        return res.status(400).json({
+          message: 'Invalid active filter.'
+        });
+      }
+
+      filter.isActive = req.query.isActive === 'true';
+    }
+
+    for (const parent of config.parents) {
+      const value = req.query[parent.field];
+
+      if (value) {
+        if (!validId(value)) {
+          return res.status(400).json({
+            message: `Invalid ${parent.field}.`
+          });
+        }
+
+        filter[parent.field] = value;
+      }
+    }
+
+    if (req.query.search) {
+      const search = escapeRegex(safeText(req.query.search, 100));
+
+      if (search) {
+        filter.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { code: { $regex: search, $options: 'i' } }
+        ];
+      }
+    }
+
+    let query = config.Model.find(filter)
+      .sort({ sortOrder: 1, createdAt: -1 })
+      .limit(500);
+
+    query = populateCatalog(query, config);
+
+    const items = await query;
+
+    res.json({ items });
+  } catch (error) {
+    handleError(res, error, 'Could not load catalog.');
+  }
+});
+
+// Create catalog record
+router.post('/catalog/:type', requireAdmin, async (req, res) => {
+  try {
+    const config = getCatalogConfig(req.params.type);
+
+    if (!config) {
+      return res.status(404).json({
+        message: 'Invalid catalog category.'
+      });
+    }
+
+    const data = prepareCatalogData(config, req.body);
+
+    const validationError = await validateCatalogData(
+      config,
+      data
+    );
+
+    if (validationError) {
+      return res.status(400).json({
+        message: validationError
+      });
+    }
+
+    const item = await config.Model.create(data);
+
+    res.status(201).json({
+      message: 'Catalog entry created successfully.',
+      item
+    });
+  } catch (error) {
+    handleError(res, error, 'Could not create catalog entry.');
+  }
+});
+
+// Update catalog record
+router.put('/catalog/:type/:id', requireAdmin, async (req, res) => {
+  try {
+    const config = getCatalogConfig(req.params.type);
+
+    if (!config) {
+      return res.status(404).json({
+        message: 'Invalid catalog category.'
+      });
+    }
+
+    if (!validId(req.params.id)) {
+      return res.status(400).json({
+        message: 'Invalid catalog ID.'
+      });
+    }
+
+    const item = await config.Model.findById(req.params.id);
+
+    if (!item) {
+      return res.status(404).json({
+        message: 'Catalog entry not found.'
+      });
+    }
+
+    const update = prepareCatalogData(config, req.body);
+
+    const merged = {
+      ...item.toObject(),
+      ...update
+    };
+
+    const validationError = await validateCatalogData(
+      config,
+      merged
+    );
+
+    if (validationError) {
+      return res.status(400).json({
+        message: validationError
+      });
+    }
+
+    Object.assign(item, update);
+    await item.save();
+
+    res.json({
+      message: 'Catalog entry updated successfully.',
+      item
+    });
+  } catch (error) {
+    handleError(res, error, 'Could not update catalog entry.');
+  }
+});
+
+// Delete catalog record safely
+router.delete('/catalog/:type/:id', requireAdmin, async (req, res) => {
+  try {
+    const config = getCatalogConfig(req.params.type);
+
+    if (!config) {
+      return res.status(404).json({
+        message: 'Invalid catalog category.'
+      });
+    }
+
+    if (!validId(req.params.id)) {
+      return res.status(400).json({
+        message: 'Invalid catalog ID.'
+      });
+    }
+
+    const item = await config.Model.findById(req.params.id);
+
+    if (!item) {
+      return res.status(404).json({
+        message: 'Catalog entry not found.'
+      });
+    }
+
+    const dependencies = {
+      departments: [
+        [Course, 'department'],
+        [Branch, 'department'],
+        [Specialization, 'department'],
+        [AcademicYear, 'department'],
+        [Semester, 'department'],
+        [Subject, 'department'],
+        [Unit, 'department']
+      ],
+      courses: [
+        [Branch, 'course'],
+        [Specialization, 'course'],
+        [AcademicYear, 'course'],
+        [Semester, 'course'],
+        [Subject, 'course'],
+        [Unit, 'course']
+      ],
+      branches: [
+        [Specialization, 'branch'],
+        [AcademicYear, 'branch'],
+        [Semester, 'branch'],
+        [Subject, 'branch'],
+        [Unit, 'branch']
+      ],
+      specializations: [
+        [AcademicYear, 'specialization'],
+        [Semester, 'specialization'],
+        [Subject, 'specialization'],
+        [Unit, 'specialization']
+      ],
+      'academic-years': [
+        [Semester, 'academicYear'],
+        [Subject, 'academicYear'],
+        [Unit, 'academicYear']
+      ],
+      semesters: [
+        [Subject, 'semester'],
+        [Unit, 'semester']
+      ],
+      subjects: [
+        [Unit, 'subject'],
+        [Material, 'subjectRef']
+      ],
+      units: [
+        [Material, 'unitRef']
+      ]
+    };
+
+    for (const [Model, field] of dependencies[req.params.type] || []) {
+      const exists = await Model.exists({
+        [field]: item._id
+      });
+
+      if (exists) {
+        return res.status(409).json({
+          message: 'This entry is linked to other academic records or study materials. Remove or update those links first.'
+        });
+      }
+    }
+
+    await config.Model.findByIdAndDelete(item._id);
+
+    res.json({
+      message: 'Catalog entry deleted successfully.'
+    });
+  } catch (error) {
+    handleError(res, error, 'Could not delete catalog entry.');
+  }
+});
 
 // ==========================================
 // QUIZZES — ADMIN MANAGEMENT
@@ -175,7 +888,7 @@ router.get('/quizzes', async (req, res) => {
 
     if (req.query.subject) {
       filter.subject = {
-        $regex: safeText(req.query.subject, 100),
+        $regex: escapeRegex(safeText(req.query.subject, 100)),
         $options: 'i'
       };
     }
@@ -266,6 +979,7 @@ router.put('/quizzes/:id', requireAdmin, async (req, res) => {
           !Array.isArray(question.options) ||
           question.options.length < 2 ||
           question.options.length > 6 ||
+          question.options.some(option => !safeText(option, 500)) ||
           !Number.isInteger(Number(question.correctAnswer)) ||
           Number(question.correctAnswer) < 0 ||
           Number(question.correctAnswer) >= question.options.length
@@ -275,6 +989,14 @@ router.put('/quizzes/:id', requireAdmin, async (req, res) => {
           });
         }
       }
+
+      update.questions = update.questions.map(question => ({
+        question: safeText(question.question, 2000),
+        options: question.options.map(option => safeText(option, 500)),
+        correctAnswer: Number(question.correctAnswer),
+        explanation: safeText(question.explanation, 2000),
+        marks: Math.min(100, Math.max(0, Number(question.marks) || 1))
+      }));
     }
 
     if (
@@ -328,7 +1050,6 @@ router.delete('/quizzes/:id', requireAdmin, async (req, res) => {
 // QUIZ ATTEMPTS
 // ==========================================
 
-// Start an attempt
 router.post('/quizzes/:id/start', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -362,7 +1083,6 @@ router.post('/quizzes/:id/start', async (req, res) => {
   }
 });
 
-// Submit attempt and calculate score on server
 router.post('/attempts/:id/submit', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -433,7 +1153,9 @@ router.post('/attempts/:id/submit', async (req, res) => {
     for (const question of quiz.questions) {
       const questionId = String(question._id);
       const selected = answerMap.get(questionId);
-      const hasAnswer = selected !== undefined &&
+
+      const hasAnswer =
+        selected !== undefined &&
         selected >= 0 &&
         selected < question.options.length;
 
@@ -504,7 +1226,7 @@ router.get('/my/quiz-history', async (req, res) => {
   }
 });
 
-// Detailed result for an attempt
+// Detailed result
 router.get('/attempts/:id/result', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -718,6 +1440,7 @@ router.put('/notes/:id', async (req, res) => {
 
     if (req.body.title !== undefined) {
       update.title = safeText(req.body.title, 150);
+
       if (!update.title) {
         return res.status(400).json({ message: 'Title is required.' });
       }
@@ -739,15 +1462,21 @@ router.put('/notes/:id', async (req, res) => {
       if (!validSemester(req.body.semester)) {
         return res.status(400).json({ message: 'Invalid semester.' });
       }
-      update.semester = req.body.semester ? Number(req.body.semester) : null;
+
+      update.semester = req.body.semester
+        ? Number(req.body.semester)
+        : null;
     }
 
     if (req.body.isPinned !== undefined) {
-      update.isPinned = Boolean(req.body.isPinned);
+      update.isPinned = req.body.isPinned === true;
     }
 
     const note = await StudentNote.findOneAndUpdate(
-      { _id: req.params.id, student: getStudentId(req) },
+      {
+        _id: req.params.id,
+        student: getStudentId(req)
+      },
       update,
       { new: true, runValidators: true }
     );
@@ -811,12 +1540,20 @@ router.post('/planner', async (req, res) => {
       ? req.body.priority
       : 'medium';
 
+    const dueDate = req.body.dueDate
+      ? new Date(req.body.dueDate)
+      : null;
+
+    if (dueDate && Number.isNaN(dueDate.getTime())) {
+      return res.status(400).json({ message: 'Invalid due date.' });
+    }
+
     const task = await PlannerTask.create({
       student: getStudentId(req),
       title,
       description: safeText(req.body.description, 2000),
       subject: safeText(req.body.subject, 150),
-      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      dueDate,
       priority
     });
 
@@ -839,6 +1576,10 @@ router.put('/planner/:id', async (req, res) => {
 
     if (req.body.title !== undefined) {
       update.title = safeText(req.body.title, 200);
+
+      if (!update.title) {
+        return res.status(400).json({ message: 'Task title is required.' });
+      }
     }
 
     if (req.body.description !== undefined) {
@@ -850,13 +1591,23 @@ router.put('/planner/:id', async (req, res) => {
     }
 
     if (req.body.dueDate !== undefined) {
-      update.dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
+      update.dueDate = req.body.dueDate
+        ? new Date(req.body.dueDate)
+        : null;
+
+      if (
+        update.dueDate &&
+        Number.isNaN(update.dueDate.getTime())
+      ) {
+        return res.status(400).json({ message: 'Invalid due date.' });
+      }
     }
 
     if (req.body.priority !== undefined) {
       if (!['low', 'medium', 'high'].includes(req.body.priority)) {
         return res.status(400).json({ message: 'Invalid priority.' });
       }
+
       update.priority = req.body.priority;
     }
 
@@ -864,11 +1615,15 @@ router.put('/planner/:id', async (req, res) => {
       if (!['pending', 'completed'].includes(req.body.status)) {
         return res.status(400).json({ message: 'Invalid task status.' });
       }
+
       update.status = req.body.status;
     }
 
     const task = await PlannerTask.findOneAndUpdate(
-      { _id: req.params.id, student: getStudentId(req) },
+      {
+        _id: req.params.id,
+        student: getStudentId(req)
+      },
       update,
       { new: true, runValidators: true }
     );
@@ -918,7 +1673,7 @@ router.get('/discussions', async (req, res) => {
 
     if (req.query.subject) {
       filter.subject = {
-        $regex: safeText(req.query.subject, 100),
+        $regex: escapeRegex(safeText(req.query.subject, 100)),
         $options: 'i'
       };
     }
@@ -956,7 +1711,9 @@ router.post('/discussions', async (req, res) => {
       content,
       department: safeText(req.body.department, 150),
       course: safeText(req.body.course, 150),
-      semester: req.body.semester ? Number(req.body.semester) : null,
+      semester: req.body.semester
+        ? Number(req.body.semester)
+        : null,
       subject: safeText(req.body.subject, 150)
     });
 
@@ -1009,7 +1766,7 @@ router.post('/discussions/:id/replies', async (req, res) => {
   }
 });
 
-// Report a discussion
+// Report discussion
 router.post('/discussions/:id/report', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -1065,7 +1822,7 @@ router.patch('/admin/discussions/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin: view reported discussions
+// Admin: reported discussions
 router.get('/admin/reported-discussions', requireAdmin, async (_req, res) => {
   try {
     const discussions = await Discussion.find({ status: 'reported' })
@@ -1082,7 +1839,6 @@ router.get('/admin/reported-discussions', requireAdmin, async (_req, res) => {
 // ANNOUNCEMENTS
 // ==========================================
 
-// List announcements matching the student's academic profile
 router.get('/announcements', async (req, res) => {
   try {
     const user = await User.findById(getStudentId(req)).select('profile');
@@ -1109,7 +1865,7 @@ router.get('/announcements', async (req, res) => {
   }
 });
 
-// Admin: create announcement and notify matching users
+// Admin: create announcement
 router.post('/announcements', requireAdmin, async (req, res) => {
   try {
     const title = safeText(req.body.title, 200);
@@ -1154,7 +1910,8 @@ router.post('/announcements', requireAdmin, async (req, res) => {
       const userFilter = { role: 'student' };
 
       if (announcement.targetDepartment !== 'All') {
-        userFilter['profile.department'] = announcement.targetDepartment;
+        userFilter['profile.department'] =
+          announcement.targetDepartment;
       }
 
       if (announcement.targetCourse !== 'All') {
@@ -1162,7 +1919,8 @@ router.post('/announcements', requireAdmin, async (req, res) => {
       }
 
       if (announcement.targetSemester !== null) {
-        userFilter['profile.semester'] = String(announcement.targetSemester);
+        userFilter['profile.semester'] =
+          String(announcement.targetSemester);
       }
 
       const students = await User.find(userFilter).select('_id');
@@ -1189,7 +1947,7 @@ router.post('/announcements', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin: list all announcements
+// Admin: list announcements
 router.get('/admin/announcements', requireAdmin, async (_req, res) => {
   try {
     const announcements = await Announcement.find()
@@ -1229,10 +1987,18 @@ router.put('/announcements/:id', requireAdmin, async (req, res) => {
 
     if (update.title !== undefined) {
       update.title = safeText(update.title, 200);
+
+      if (!update.title) {
+        return res.status(400).json({ message: 'Title is required.' });
+      }
     }
 
     if (update.message !== undefined) {
       update.message = safeText(update.message, 5000);
+
+      if (!update.message) {
+        return res.status(400).json({ message: 'Message is required.' });
+      }
     }
 
     if (
@@ -1240,6 +2006,42 @@ router.put('/announcements/:id', requireAdmin, async (req, res) => {
       !validSemester(update.targetSemester)
     ) {
       return res.status(400).json({ message: 'Invalid semester.' });
+    }
+
+    if (
+      update.category !== undefined &&
+      ![
+        'general',
+        'academic',
+        'exam',
+        'deadline',
+        'event'
+      ].includes(update.category)
+    ) {
+      return res.status(400).json({ message: 'Invalid category.' });
+    }
+
+    if (update.targetDepartment !== undefined) {
+      update.targetDepartment =
+        safeText(update.targetDepartment, 150) || 'All';
+    }
+
+    if (update.targetCourse !== undefined) {
+      update.targetCourse =
+        safeText(update.targetCourse, 150) || 'All';
+    }
+
+    if (update.targetSemester !== undefined) {
+      update.targetSemester = update.targetSemester
+        ? Number(update.targetSemester)
+        : null;
+    }
+
+    if (
+      update.published !== undefined &&
+      typeof update.published !== 'boolean'
+    ) {
+      return res.status(400).json({ message: 'Invalid published value.' });
     }
 
     const announcement = await Announcement.findByIdAndUpdate(
@@ -1271,7 +2073,9 @@ router.delete('/announcements/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ message: 'Announcement not found.' });
     }
 
-    await Notification.deleteMany({ relatedId: announcement._id });
+    await Notification.deleteMany({
+      relatedId: announcement._id
+    });
 
     res.json({ message: 'Announcement deleted.' });
   } catch (error) {
@@ -1322,7 +2126,10 @@ router.patch('/notifications/:id/read', async (req, res) => {
       return res.status(404).json({ message: 'Notification not found.' });
     }
 
-    res.json({ message: 'Notification marked as read.', notification });
+    res.json({
+      message: 'Notification marked as read.',
+      notification
+    });
   } catch (error) {
     handleError(res, error, 'Could not update notification.');
   }
@@ -1339,7 +2146,9 @@ router.patch('/notifications/read-all', async (req, res) => {
       { isRead: true }
     );
 
-    res.json({ message: 'All notifications marked as read.' });
+    res.json({
+      message: 'All notifications marked as read.'
+    });
   } catch (error) {
     handleError(res, error, 'Could not update notifications.');
   }
