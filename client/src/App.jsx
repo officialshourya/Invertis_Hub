@@ -1,5 +1,11 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
+
 import {
   BookOpen, LayoutDashboard, FileText, ClipboardList,
   FlaskConical, HelpCircle, Users, LogOut,
@@ -12,14 +18,20 @@ import {
 
 import ProfilePage from './ProfilePage.jsx';
 import { AcademicPages } from './AcademicPages.jsx';
+import AdminStudio from './AdminStudio.jsx';
 
 const API = (
   import.meta.env.VITE_API_URL || 'http://localhost:5000'
 ).replace(/\/+$/, '');
 
 const TYPES = [
-  'Notes', 'PYQ', 'Assignment', 'Practical',
-  'Question Bank', 'Syllabus', 'Other'
+  'Notes',
+  'PYQ',
+  'Assignment',
+  'Practical',
+  'Question Bank',
+  'Syllabus',
+  'Other'
 ];
 
 const navItems = [
@@ -41,7 +53,20 @@ const navItems = [
   { id: 'announcements', label: 'Announcements', icon: Megaphone, section: 'COMMUNITY' },
   { id: 'notifications', label: 'Notifications', icon: Bell, section: 'COMMUNITY' },
 
-  { id: 'users', label: 'Users', icon: Users, section: 'ADMIN', admin: true }
+  {
+    id: 'admin-studio',
+    label: 'Admin Studio',
+    icon: ShieldCheck,
+    section: 'ADMIN',
+    admin: true
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    icon: Users,
+    section: 'ADMIN',
+    admin: true
+  }
 ];
 
 function App() {
@@ -97,7 +122,9 @@ function App() {
   });
 
   const [file, setFile] = useState(null);
+
   const [authMode, setAuthMode] = useState('login');
+
   const [auth, setAuth] = useState({
     name: '',
     email: '',
@@ -111,20 +138,8 @@ function App() {
 
   const isAdmin = user?.role === 'admin';
 
-  const visibleItems = useMemo(() => {
-    return materials.filter(m => {
-      const matchTab =
-        active === 'pyq' ? m.type === 'PYQ' :
-        active === 'assignments' ? m.type === 'Assignment' :
-        active === 'practicals' ? m.type === 'Practical' :
-        active === 'questions' ? m.type === 'Question Bank' :
-        true;
-
-      return matchTab;
-    });
-  }, [materials, active]);
-
-  const request = async (url, options = {}) => {
+  // Central API request function.
+  const request = useCallback(async (url, options = {}) => {
     const isFormData =
       typeof FormData !== 'undefined' &&
       options.body instanceof FormData;
@@ -147,9 +162,24 @@ function App() {
     }
 
     return data;
-  };
+  }, [headers]);
+
+  const visibleItems = useMemo(() => {
+    return materials.filter(m => {
+      const matchTab =
+        active === 'pyq' ? m.type === 'PYQ' :
+        active === 'assignments' ? m.type === 'Assignment' :
+        active === 'practicals' ? m.type === 'Practical' :
+        active === 'questions' ? m.type === 'Question Bank' :
+        true;
+
+      return matchTab;
+    });
+  }, [materials, active]);
 
   const loadMaterials = async () => {
+    if (!token || !user) return;
+
     try {
       const params = new URLSearchParams();
 
@@ -183,21 +213,34 @@ function App() {
     }
   };
 
+  // Load materials only after authentication.
   useEffect(() => {
-    loadMaterials();
-  }, [query, typeFilter, semesterFilter]);
+    if (!token || !user) return;
 
+    loadMaterials();
+  }, [token, user, query, typeFilter, semesterFilter]);
+
+  // Restore authenticated session.
   useEffect(() => {
     if (token && user) {
       setView('app');
+
+      if (user.role === 'admin') {
+        setActive('admin-studio');
+      } else {
+        setActive('overview');
+      }
+
       loadAdminData();
     }
   }, [token, user]);
 
+  // Automatically hide toast.
   useEffect(() => {
     if (!notice) return;
 
     const t = setTimeout(() => setNotice(''), 4500);
+
     return () => clearTimeout(t);
   }, [notice]);
 
@@ -217,9 +260,17 @@ function App() {
       );
 
       if (authMode === 'register') {
-        setNotice(data.message || 'Registration successful. Please sign in.');
+        setNotice(
+          data.message || 'Registration successful. Please sign in.'
+        );
+
         setAuthMode('login');
-        setAuth({ name: '', email: auth.email, password: '' });
+
+        setAuth({
+          name: '',
+          email: auth.email,
+          password: ''
+        });
       } else {
         localStorage.setItem('ih_token', data.token);
         localStorage.setItem('ih_user', JSON.stringify(data.user));
@@ -227,7 +278,13 @@ function App() {
         setToken(data.token);
         setUser(data.user);
         setView('app');
-        setActive('overview');
+
+        setActive(
+          data.user.role === 'admin'
+            ? 'admin-studio'
+            : 'overview'
+        );
+
         setNotice(`Welcome, ${data.user.name}`);
       }
     } catch (e) {
@@ -248,7 +305,9 @@ function App() {
     try {
       localStorage.setItem('ih_user', JSON.stringify(updated));
     } catch {
-      setNotice('Profile updated, but local session storage could not be updated.');
+      setNotice(
+        'Profile updated, but local session storage could not be updated.'
+      );
     }
   };
 
@@ -265,6 +324,9 @@ function App() {
     setView('home');
     setActive('overview');
     setMobileNav(false);
+    setMaterials([]);
+    setStats({});
+    setUsers([]);
   };
 
   const resetForm = () => {
@@ -347,7 +409,9 @@ function App() {
   };
 
   const deleteMaterial = async (item) => {
-    if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+    if (!window.confirm(
+      `Delete "${item.title}"? This cannot be undone.`
+    )) {
       return;
     }
 
@@ -368,6 +432,10 @@ function App() {
   const startApp = () => {
     if (token && user) {
       setView('app');
+
+      if (isAdmin) {
+        setActive('admin-studio');
+      }
     } else {
       setView('auth');
     }
@@ -389,6 +457,7 @@ function App() {
     visibleNavItems.map(item => item.section)
   )];
 
+  // Landing page.
   if (view === 'home') {
     return (
       <Landing
@@ -401,6 +470,7 @@ function App() {
     );
   }
 
+  // Authentication page.
   if (view === 'auth') {
     return (
       <AuthScreen
@@ -416,6 +486,26 @@ function App() {
     );
   }
 
+  // Separate Admin Studio layout.
+  if (
+    view === 'app' &&
+    isAdmin &&
+    active === 'admin-studio'
+  ) {
+    return (
+      <AdminStudio
+        request={request}
+        onToast={(message, type) => {
+          setNotice(message);
+        }}
+        onBack={() => {
+          setActive('overview');
+        }}
+      />
+    );
+  }
+
+  // Normal Student Panel and Admin workspace.
   return (
     <div className="app-shell">
 
@@ -429,7 +519,10 @@ function App() {
       <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
 
         <div className="side-brand">
-          <img src="/invertis-hub-logo.jpg" alt="Invertis Hub" />
+          <img
+            src="/invertis-hub-logo.jpg"
+            alt="Invertis Hub"
+          />
 
           <div>
             <b>INVERTIS HUB</b>
@@ -455,14 +548,19 @@ function App() {
                 .map(item => (
                   <button
                     key={item.id}
-                    className={`nav-link ${active === item.id ? 'active' : ''}`}
+                    className={`nav-link ${
+                      active === item.id ? 'active' : ''
+                    }`}
                     onClick={() => navigate(item.id)}
                   >
                     <item.icon size={18} />
                     <span>{item.label}</span>
 
                     {active === item.id && (
-                      <ChevronRight size={15} className="nav-arrow" />
+                      <ChevronRight
+                        size={15}
+                        className="nav-arrow"
+                      />
                     )}
                   </button>
                 ))}
@@ -536,7 +634,10 @@ function App() {
           {notice && (
             <div className="toast" role="status">
               {notice}
-              <button onClick={() => setNotice('')} aria-label="Dismiss">
+              <button
+                onClick={() => setNotice('')}
+                aria-label="Dismiss"
+              >
                 <X size={15} />
               </button>
             </div>
@@ -640,14 +741,25 @@ function Landing({ onStart, onLogin }) {
   return (
     <div className="landing">
       <header className="landing-nav">
-        <img src="/invertis-hub-logo.jpg" alt="Invertis Hub logo" />
+        <img
+          src="/invertis-hub-logo.jpg"
+          alt="Invertis Hub logo"
+        />
 
         <div className="landing-nav-actions">
           <a href="#features">Features</a>
-          <button className="btn btn-outline" onClick={onLogin}>
+
+          <button
+            className="btn btn-outline"
+            onClick={onLogin}
+          >
             Log in
           </button>
-          <button className="btn btn-primary" onClick={onStart}>
+
+          <button
+            className="btn btn-primary"
+            onClick={onStart}
+          >
             Open Hub <ChevronRight size={16} />
           </button>
         </div>
@@ -671,7 +783,10 @@ function Landing({ onStart, onLogin }) {
           </p>
 
           <div className="hero-actions">
-            <button className="btn btn-primary btn-large" onClick={onStart}>
+            <button
+              className="btn btn-primary btn-large"
+              onClick={onStart}
+            >
               Explore Invertis Hub <ChevronRight size={18} />
             </button>
 
@@ -737,7 +852,9 @@ function Landing({ onStart, onLogin }) {
         <div className="section-heading">
           <span className="eyebrow">THE HUB EXPERIENCE</span>
           <h2>Everything academic, <em>in one place.</em></h2>
-          <p>Explore the resources that support your learning journey.</p>
+          <p>
+            Explore the resources that support your learning journey.
+          </p>
         </div>
 
         <div className="feature-grid">
@@ -746,41 +863,49 @@ function Landing({ onStart, onLogin }) {
             title="Study Materials"
             text="Find subject-wise notes, unit resources and reference PDFs."
           />
+
           <Feature
             icon={FileText}
             title="PYQ Library"
             text="Browse previous year papers by semester and subject."
           />
+
           <Feature
             icon={ClipboardList}
             title="Assignments"
             text="Access assignment briefs, instructions and resources."
           />
+
           <Feature
             icon={FlaskConical}
             title="Practical Hub"
             text="Keep lab manuals, experiment resources and viva prep together."
           />
+
           <Feature
             icon={HelpCircle}
             title="Question Bank"
             text="Practise from organised question collections."
           />
+
           <Feature
             icon={Trophy}
             title="Quiz Arena"
             text="Attempt quizzes and track your practice results."
           />
+
           <Feature
             icon={NotebookPen}
             title="Personal Notes"
             text="Keep your own study notes organised."
           />
+
           <Feature
             icon={CalendarDays}
             title="Study Planner"
             text="Organise academic tasks and due dates."
           />
+
           <Feature
             icon={MessageCircle}
             title="Discussions"
@@ -791,10 +916,14 @@ function Landing({ onStart, onLogin }) {
 
       <footer className="landing-footer">
         <img src="/invertis-hub-logo.jpg" alt="Invertis Hub" />
+
         <span>
           © {new Date().getFullYear()} Invertis Hub · Academic Learning Portal
         </span>
-        <small>Designed & Developed by SHOMIQ TECHNOLOGIES</small>
+
+        <small>
+          Designed & Developed by SHOMIQ TECHNOLOGIES
+        </small>
       </footer>
     </div>
   );
@@ -806,6 +935,7 @@ function Feature({ icon: Icon, title, text }) {
       <div className="feature-icon">
         <Icon size={21} />
       </div>
+
       <h3>{title}</h3>
       <p>{text}</p>
     </div>
@@ -836,7 +966,9 @@ function AuthScreen({
         />
 
         <div className="auth-heading">
-          <span className="eyebrow">WELCOME TO YOUR ACADEMIC SPACE</span>
+          <span className="eyebrow">
+            WELCOME TO YOUR ACADEMIC SPACE
+          </span>
 
           <h1>
             {authMode === 'login'
@@ -851,16 +983,21 @@ function AuthScreen({
           </p>
         </div>
 
-        {notice && <div className="inline-notice">{notice}</div>}
+        {notice && (
+          <div className="inline-notice">{notice}</div>
+        )}
 
         <form onSubmit={onSubmit} className="auth-form">
           {authMode === 'register' && (
             <label>
               Full name
+
               <input
                 required
                 value={auth.name}
-                onChange={e => setAuth({ ...auth, name: e.target.value })}
+                onChange={e =>
+                  setAuth({ ...auth, name: e.target.value })
+                }
                 placeholder="Your name"
               />
             </label>
@@ -868,30 +1005,44 @@ function AuthScreen({
 
           <label>
             Email address
+
             <input
               required
               type="email"
               value={auth.email}
-              onChange={e => setAuth({ ...auth, email: e.target.value })}
+              onChange={e =>
+                setAuth({ ...auth, email: e.target.value })
+              }
               placeholder="name@example.com"
             />
           </label>
 
           <label>
             Password
+
             <input
               required
               minLength={8}
               type="password"
               value={auth.password}
-              onChange={e => setAuth({ ...auth, password: e.target.value })}
+              onChange={e =>
+                setAuth({ ...auth, password: e.target.value })
+              }
               placeholder="At least 8 characters"
             />
           </label>
 
-          <button className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? <LoaderCircle className="spin" size={17} /> : null}
-            {authMode === 'login' ? 'Sign in' : 'Create account'}
+          <button
+            className="btn btn-primary btn-full"
+            disabled={loading}
+          >
+            {loading && (
+              <LoaderCircle className="spin" size={17} />
+            )}
+
+            {authMode === 'login'
+              ? 'Sign in'
+              : 'Create account'}
           </button>
         </form>
 
@@ -904,10 +1055,14 @@ function AuthScreen({
 
           <button
             onClick={() =>
-              setAuthMode(authMode === 'login' ? 'register' : 'login')
+              setAuthMode(
+                authMode === 'login' ? 'register' : 'login'
+              )
             }
           >
-            {authMode === 'login' ? 'Create account' : 'Sign in'}
+            {authMode === 'login'
+              ? 'Create account'
+              : 'Sign in'}
           </button>
         </div>
 
@@ -946,10 +1101,15 @@ function Overview({
     <>
       <div className="welcome-row">
         <div>
-          <span className="eyebrow">YOUR ACADEMIC WORKSPACE</span>
+          <span className="eyebrow">
+            YOUR ACADEMIC WORKSPACE
+          </span>
+
           <h1>
-            Hello, {user?.name?.split(' ')[0] || 'there'} <span className="wave">✦</span>
+            Hello, {user?.name?.split(' ')[0] || 'there'}{' '}
+            <span className="wave">✦</span>
           </h1>
+
           <p>
             {isAdmin
               ? 'Manage resources and keep your academic hub up to date.'
@@ -958,7 +1118,10 @@ function Overview({
         </div>
 
         {isAdmin && (
-          <button className="btn btn-primary" onClick={onUpload}>
+          <button
+            className="btn btn-primary"
+            onClick={onUpload}
+          >
             <Plus size={17} /> Upload material
           </button>
         )}
@@ -967,10 +1130,16 @@ function Overview({
       <div className="stats-grid">
         {cards.map(([label, value, Icon]) => (
           <div className="stat-card" key={label}>
-            <div className="stat-icon"><Icon size={19} /></div>
+            <div className="stat-icon">
+              <Icon size={19} />
+            </div>
+
             <span>{label}</span>
             <strong>{value}</strong>
-            <small>{isAdmin ? 'Current total' : 'Available in the hub'}</small>
+
+            <small>
+              {isAdmin ? 'Current total' : 'Available in the hub'}
+            </small>
           </div>
         ))}
       </div>
@@ -982,20 +1151,80 @@ function Overview({
               <span className="eyebrow">EXPLORE</span>
               <h2>Academic resources</h2>
             </div>
+
             <span className="subtle-badge">Study space</span>
           </div>
 
           <div className="quick-grid">
-            <Quick icon={BookOpen} title="Study Materials" text="Notes & unit resources" onClick={() => onNavigate('materials')} />
-            <Quick icon={FileText} title="PYQ Papers" text="Previous year papers" onClick={() => onNavigate('pyq')} />
-            <Quick icon={ClipboardList} title="Assignments" text="Tasks & resources" onClick={() => onNavigate('assignments')} />
-            <Quick icon={FlaskConical} title="Practical Hub" text="Lab manuals & viva" onClick={() => onNavigate('practicals')} />
-            <Quick icon={HelpCircle} title="Question Bank" text="Important questions" onClick={() => onNavigate('questions')} />
-            <Quick icon={Trophy} title="Quiz Arena" text="Practice quizzes" onClick={() => onNavigate('quizzes')} />
-            <Quick icon={NotebookPen} title="Personal Notes" text="Your saved notes" onClick={() => onNavigate('notes')} />
-            <Quick icon={CalendarDays} title="Study Planner" text="Organise your tasks" onClick={() => onNavigate('planner')} />
-            <Quick icon={MessageCircle} title="Discussions" text="Academic community" onClick={() => onNavigate('discussions')} />
-            <Quick icon={Bookmark} title="Bookmarks" text="Saved resources" onClick={() => onNavigate('bookmarks')} />
+            <Quick
+              icon={BookOpen}
+              title="Study Materials"
+              text="Notes & unit resources"
+              onClick={() => onNavigate('materials')}
+            />
+
+            <Quick
+              icon={FileText}
+              title="PYQ Papers"
+              text="Previous year papers"
+              onClick={() => onNavigate('pyq')}
+            />
+
+            <Quick
+              icon={ClipboardList}
+              title="Assignments"
+              text="Tasks & resources"
+              onClick={() => onNavigate('assignments')}
+            />
+
+            <Quick
+              icon={FlaskConical}
+              title="Practical Hub"
+              text="Lab manuals & viva"
+              onClick={() => onNavigate('practicals')}
+            />
+
+            <Quick
+              icon={HelpCircle}
+              title="Question Bank"
+              text="Important questions"
+              onClick={() => onNavigate('questions')}
+            />
+
+            <Quick
+              icon={Trophy}
+              title="Quiz Arena"
+              text="Practice quizzes"
+              onClick={() => onNavigate('quizzes')}
+            />
+
+            <Quick
+              icon={NotebookPen}
+              title="Personal Notes"
+              text="Your saved notes"
+              onClick={() => onNavigate('notes')}
+            />
+
+            <Quick
+              icon={CalendarDays}
+              title="Study Planner"
+              text="Organise your tasks"
+              onClick={() => onNavigate('planner')}
+            />
+
+            <Quick
+              icon={MessageCircle}
+              title="Discussions"
+              text="Academic community"
+              onClick={() => onNavigate('discussions')}
+            />
+
+            <Quick
+              icon={Bookmark}
+              title="Bookmarks"
+              text="Saved resources"
+              onClick={() => onNavigate('bookmarks')}
+            />
           </div>
         </section>
 
@@ -1017,11 +1246,17 @@ function Overview({
           {materials.slice(0, 5).length ? (
             materials.slice(0, 5).map(m => (
               <div className="recent-item" key={m._id}>
-                <div className="file-icon"><FileText size={17} /></div>
+                <div className="file-icon">
+                  <FileText size={17} />
+                </div>
+
                 <div className="recent-info">
                   <b>{m.title}</b>
-                  <span>{m.subject} · Semester {m.semester}</span>
+                  <span>
+                    {m.subject} · Semester {m.semester}
+                  </span>
                 </div>
+
                 <span className="type-mini">{m.type}</span>
               </div>
             ))
@@ -1036,9 +1271,13 @@ function Overview({
       </div>
 
       <div className="notice-strip">
-        <div className="notice-symbol"><Sparkles size={19} /></div>
+        <div className="notice-symbol">
+          <Sparkles size={19} />
+        </div>
+
         <div>
           <b>A focused space for learning</b>
+
           <p>
             Study materials are organised by category, semester and subject
             to make them easier to find.
@@ -1052,11 +1291,15 @@ function Overview({
 function Quick({ icon: Icon, title, text, onClick }) {
   return (
     <button className="quick-item" onClick={onClick}>
-      <span className="quick-icon"><Icon size={19} /></span>
+      <span className="quick-icon">
+        <Icon size={19} />
+      </span>
+
       <span>
         <b>{title}</b>
         <small>{text}</small>
       </span>
+
       <ChevronRight size={16} />
     </button>
   );
@@ -1083,11 +1326,16 @@ function MaterialsPage({
         <div>
           <span className="eyebrow">RESOURCE LIBRARY</span>
           <h1>{title}</h1>
-          <p>Browse academic resources shared on Invertis Hub.</p>
+          <p>
+            Browse academic resources shared on Invertis Hub.
+          </p>
         </div>
 
         {isAdmin && (
-          <button className="btn btn-primary" onClick={onUpload}>
+          <button
+            className="btn btn-primary"
+            onClick={onUpload}
+          >
             <Plus size={17} /> Upload material
           </button>
         )}
@@ -1096,6 +1344,7 @@ function MaterialsPage({
       <div className="filters">
         <div className="search-box">
           <Search size={17} />
+
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
@@ -1108,7 +1357,10 @@ function MaterialsPage({
           onChange={e => setTypeFilter(e.target.value)}
         >
           <option value="All">All types</option>
-          {TYPES.map(t => <option key={t}>{t}</option>)}
+
+          {TYPES.map(t => (
+            <option key={t}>{t}</option>
+          ))}
         </select>
 
         <select
@@ -1116,8 +1368,11 @@ function MaterialsPage({
           onChange={e => setSemesterFilter(e.target.value)}
         >
           <option value="">All semesters</option>
+
           {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-            <option key={n} value={n}>Semester {n}</option>
+            <option key={n} value={n}>
+              Semester {n}
+            </option>
           ))}
         </select>
       </div>
@@ -1131,7 +1386,10 @@ function MaterialsPage({
           {items.map(m => (
             <article className="material-card" key={m._id}>
               <div className="material-card-top">
-                <div className="material-file"><FileText size={21} /></div>
+                <div className="material-file">
+                  <FileText size={21} />
+                </div>
+
                 <span className="material-type">{m.type}</span>
               </div>
 
@@ -1145,15 +1403,20 @@ function MaterialsPage({
               <div className="material-meta">
                 <span>{m.subject}</span>
                 <span>Sem {m.semester}</span>
+
                 {m.unit && (
                   <span>
-                    {m.unit.startsWith('Unit') ? m.unit : `Unit ${m.unit}`}
+                    {m.unit.startsWith('Unit')
+                      ? m.unit
+                      : `Unit ${m.unit}`}
                   </span>
                 )}
               </div>
 
               <div className="material-card-bottom">
-                <small>{m.originalName || 'Study resource'}</small>
+                <small>
+                  {m.originalName || 'Study resource'}
+                </small>
 
                 <div className="material-actions">
                   <a
@@ -1194,6 +1457,7 @@ function MaterialsPage({
         <div className="empty-large">
           <FolderOpen size={35} />
           <h3>No resources found</h3>
+
           <p>
             {isAdmin
               ? 'Upload your first resource using the button above.'
@@ -1216,7 +1480,10 @@ function UploadModal({
   loading
 }) {
   const change = e =>
-    setForm({ ...form, [e.target.name]: e.target.value });
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value
+    });
 
   return (
     <div
@@ -1229,7 +1496,13 @@ function UploadModal({
         <div className="modal-heading">
           <div>
             <span className="eyebrow">CONTENT MANAGEMENT</span>
-            <h2>{editing ? 'Edit material details' : 'Upload study material'}</h2>
+
+            <h2>
+              {editing
+                ? 'Edit material details'
+                : 'Upload study material'}
+            </h2>
+
             <p>Add a resource to the student library.</p>
           </div>
 
@@ -1242,6 +1515,7 @@ function UploadModal({
           <div className="form-grid">
             <label className="wide">
               Material title *
+
               <input
                 name="title"
                 required
@@ -1253,13 +1527,21 @@ function UploadModal({
 
             <label>
               Material type *
-              <select name="type" value={form.type} onChange={change}>
-                {TYPES.map(t => <option key={t}>{t}</option>)}
+
+              <select
+                name="type"
+                value={form.type}
+                onChange={change}
+              >
+                {TYPES.map(t => (
+                  <option key={t}>{t}</option>
+                ))}
               </select>
             </label>
 
             <label>
               Department
+
               <select
                 name="department"
                 value={form.department}
@@ -1276,19 +1558,23 @@ function UploadModal({
 
             <label>
               Semester *
+
               <select
                 name="semester"
                 value={form.semester}
                 onChange={change}
               >
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-                  <option key={n} value={n}>Semester {n}</option>
+                  <option key={n} value={n}>
+                    Semester {n}
+                  </option>
                 ))}
               </select>
             </label>
 
             <label>
               Subject *
+
               <input
                 name="subject"
                 required
@@ -1300,6 +1586,7 @@ function UploadModal({
 
             <label>
               Unit / Topic
+
               <input
                 name="unit"
                 value={form.unit}
@@ -1310,6 +1597,7 @@ function UploadModal({
 
             <label>
               Year / Session
+
               <input
                 name="year"
                 value={form.year}
@@ -1320,6 +1608,7 @@ function UploadModal({
 
             <label className="wide">
               Description
+
               <textarea
                 name="description"
                 value={form.description}
@@ -1333,14 +1622,23 @@ function UploadModal({
           {!editing && (
             <label className="file-drop">
               <UploadCloud size={25} />
-              <b>{file ? file.name : 'Choose a file to upload'}</b>
+
+              <b>
+                {file
+                  ? file.name
+                  : 'Choose a file to upload'}
+              </b>
+
               <span>
                 PDF, DOC, DOCX, PPT, PPTX, JPG or PNG · Maximum 15 MB
               </span>
+
               <input
                 type="file"
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
-                onChange={e => setFile(e.target.files?.[0] || null)}
+                onChange={e =>
+                  setFile(e.target.files?.[0] || null)
+                }
                 required
               />
             </label>
@@ -1362,12 +1660,17 @@ function UploadModal({
               Cancel
             </button>
 
-            <button className="btn btn-primary" disabled={loading}>
+            <button
+              className="btn btn-primary"
+              disabled={loading}
+            >
               {loading
                 ? <LoaderCircle size={17} className="spin" />
                 : <UploadCloud size={17} />}
 
-              {editing ? 'Save changes' : 'Publish material'}
+              {editing
+                ? 'Save changes'
+                : 'Publish material'}
             </button>
           </div>
         </form>
@@ -1404,11 +1707,13 @@ function UsersPage({ users }) {
                 <tr key={u._id}>
                   <td><b>{u.name}</b></td>
                   <td>{u.email}</td>
+
                   <td>
                     <span className={`role-tag ${u.role}`}>
                       {u.role}
                     </span>
                   </td>
+
                   <td>
                     {u.createdAt
                       ? new Date(u.createdAt).toLocaleDateString()
@@ -1421,7 +1726,9 @@ function UsersPage({ users }) {
         </div>
 
         {!users.length && (
-          <div className="empty-state">No users found.</div>
+          <div className="empty-state">
+            No users found.
+          </div>
         )}
       </div>
     </>
