@@ -2,14 +2,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen, LayoutDashboard, FileText, ClipboardList,
-  FlaskConical, HelpCircle, Users, Settings, LogOut,
+  FlaskConical, HelpCircle, Users, LogOut,
   Search, Plus, UploadCloud, Trash2, Pencil, Download,
   ExternalLink, Menu, X, GraduationCap, Bell,
   ShieldCheck, Sparkles, ChevronRight, FolderOpen,
-  Eye, LoaderCircle, UserRound
+  LoaderCircle, UserRound, Bookmark, NotebookPen,
+  CalendarDays, MessageCircle, Megaphone, Trophy
 } from 'lucide-react';
 
 import ProfilePage from './ProfilePage.jsx';
+import { AcademicPages } from './AcademicPages.jsx';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -19,15 +21,29 @@ const TYPES = [
 ];
 
 const navItems = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'profile', label: 'My Profile', icon: UserRound },
-  { id: 'materials', label: 'Study Materials', icon: BookOpen },
-  { id: 'pyq', label: 'PYQ Papers', icon: FileText },
-  { id: 'assignments', label: 'Assignments', icon: ClipboardList },
-  { id: 'practicals', label: 'Practical Hub', icon: FlaskConical },
-  { id: 'questions', label: 'Question Bank', icon: HelpCircle },
-  { id: 'users', label: 'Users', icon: Users, admin: true }
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard, section: 'MAIN' },
+  { id: 'profile', label: 'My Profile', icon: UserRound, section: 'MAIN' },
+
+  { id: 'materials', label: 'Study Materials', icon: BookOpen, section: 'ACADEMICS' },
+  { id: 'pyq', label: 'PYQ Papers', icon: FileText, section: 'ACADEMICS' },
+  { id: 'assignments', label: 'Assignments', icon: ClipboardList, section: 'ACADEMICS' },
+  { id: 'practicals', label: 'Practical Hub', icon: FlaskSinIcon, section: 'ACADEMICS' },
+  { id: 'questions', label: 'Question Bank', icon: HelpCircle, section: 'ACADEMICS' },
+  { id: 'quizzes', label: 'Quiz Arena', icon: Trophy, section: 'ACADEMICS' },
+
+  { id: 'bookmarks', label: 'My Bookmarks', icon: Bookmark, section: 'MY SPACE' },
+  { id: 'notes', label: 'Personal Notes', icon: NotebookPen, section: 'MY SPACE' },
+  { id: 'planner', label: 'Study Planner', icon: CalendarDays, section: 'MY SPACE' },
+
+  { id: 'discussions', label: 'Discussions', icon: MessageCircle, section: 'COMMUNITY' },
+  { id: 'announcements', label: 'Announcements', icon: Megaphone, section: 'COMMUNITY' },
+  { id: 'notifications', label: 'Notifications', icon: Bell, section: 'COMMUNITY' },
+
+  { id: 'users', label: 'Users', icon: Users, section: 'ADMIN', admin: true }
 ];
+
+// Alias keeps the icon reference clear.
+const FlaskSinIcon = FlaskConical;
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('ih_token') || '');
@@ -181,8 +197,9 @@ function App() {
       );
 
       if (authMode === 'register') {
-        setNotice(data.message);
+        setNotice(data.message || 'Registration successful. Please sign in.');
         setAuthMode('login');
+        setAuth({ name: '', email: auth.email, password: '' });
       } else {
         localStorage.setItem('ih_token', data.token);
         localStorage.setItem('ih_user', JSON.stringify(data.user));
@@ -190,6 +207,7 @@ function App() {
         setToken(data.token);
         setUser(data.user);
         setView('app');
+        setActive('overview');
         setNotice(`Welcome, ${data.user.name}`);
       }
     } catch (e) {
@@ -217,6 +235,7 @@ function App() {
     setUser(null);
     setView('home');
     setActive('overview');
+    setMobileNav(false);
   };
 
   const resetForm = () => {
@@ -264,9 +283,7 @@ function App() {
           body: JSON.stringify(form)
         });
 
-        setNotice(
-          'Material details updated. To replace the file, delete this item and upload the new file.'
-        );
+        setNotice('Material details updated.');
       } else {
         if (!file) {
           throw new Error('Please select a file to upload.');
@@ -301,7 +318,7 @@ function App() {
   };
 
   const deleteMaterial = async (item) => {
-    if (!confirm(`Delete “${item.title}”? This cannot be undone.`)) {
+    if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) {
       return;
     }
 
@@ -329,6 +346,19 @@ function App() {
 
   const assetUrl = (name) =>
     `${API}/uploads/${encodeURIComponent(name || '')}`;
+
+  const navigate = (page) => {
+    setActive(page);
+    setMobileNav(false);
+  };
+
+  const visibleNavItems = navItems.filter(
+    item => !item.admin || isAdmin
+  );
+
+  const navSections = [...new Set(
+    visibleNavItems.map(item => item.section)
+  )];
 
   if (view === 'home') {
     return (
@@ -380,34 +410,35 @@ function App() {
           <button
             className="icon-btn mobile-close"
             onClick={() => setMobileNav(false)}
+            aria-label="Close navigation"
           >
             <X size={19} />
           </button>
         </div>
 
-        <div className="side-label">WORKSPACE</div>
+        <nav className="hub-navigation">
+          {navSections.map(section => (
+            <div className="nav-section" key={section}>
+              <div className="side-label">{section}</div>
 
-        <nav>
-          {navItems
-            .filter(n => !n.admin || isAdmin)
-            .map(item => (
-              <button
-                key={item.id}
-                className={`nav-link ${active === item.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActive(item.id);
-                  setMobileNav(false);
-                }}
-              >
-                <item.icon size={18} />
+              {visibleNavItems
+                .filter(item => item.section === section)
+                .map(item => (
+                  <button
+                    key={item.id}
+                    className={`nav-link ${active === item.id ? 'active' : ''}`}
+                    onClick={() => navigate(item.id)}
+                  >
+                    <item.icon size={18} />
+                    <span>{item.label}</span>
 
-                <span>{item.label}</span>
-
-                {active === item.id && (
-                  <ChevronRight size={15} className="nav-arrow" />
-                )}
-              </button>
-            ))}
+                    {active === item.id && (
+                      <ChevronRight size={15} className="nav-arrow" />
+                    )}
+                  </button>
+                ))}
+            </div>
+          ))}
         </nav>
 
         <div className="sidebar-bottom">
@@ -415,7 +446,7 @@ function App() {
             <Sparkles size={18} />
             <b>Keep learning</b>
             <p>
-              Find notes, practice questions and resources in one place.
+              Find notes, practise quizzes and organise your academic work.
             </p>
           </div>
 
@@ -433,6 +464,7 @@ function App() {
           <button
             className="icon-btn mobile-menu"
             onClick={() => setMobileNav(true)}
+            aria-label="Open navigation"
           >
             <Menu size={20} />
           </button>
@@ -449,6 +481,14 @@ function App() {
               <ShieldCheck size={14} />
               {isAdmin ? 'Administrator' : 'Student'}
             </span>
+
+            <button
+              className="icon-btn notification-shortcut"
+              onClick={() => navigate('notifications')}
+              title="Notifications"
+            >
+              <Bell size={18} />
+            </button>
 
             <div className="avatar">
               {user?.name?.[0]?.toUpperCase() || 'U'}
@@ -467,7 +507,7 @@ function App() {
           {notice && (
             <div className="toast" role="status">
               {notice}
-              <button onClick={() => setNotice('')}>
+              <button onClick={() => setNotice('')} aria-label="Dismiss">
                 <X size={15} />
               </button>
             </div>
@@ -479,7 +519,7 @@ function App() {
               user={user}
               stats={stats}
               materials={materials}
-              onNavigate={setActive}
+              onNavigate={navigate}
               onUpload={() => {
                 resetForm();
                 setShowUpload(true);
@@ -520,6 +560,24 @@ function App() {
               onEdit={openEdit}
               onDelete={deleteMaterial}
               assetUrl={assetUrl}
+            />
+          )}
+
+          {[
+            'quizzes',
+            'bookmarks',
+            'notes',
+            'planner',
+            'discussions',
+            'announcements',
+            'notifications'
+          ].includes(active) && (
+            <AcademicPages
+              page={active}
+              request={request}
+              user={user}
+              isAdmin={isAdmin}
+              setNotice={setNotice}
             />
           )}
 
@@ -580,7 +638,7 @@ function Landing({ onStart, onLogin }) {
 
           <p>
             One organised space for study materials, previous year papers,
-            assignments and practical resources.
+            assignments, quizzes and academic resources.
           </p>
 
           <div className="hero-actions">
@@ -680,9 +738,24 @@ function Landing({ onStart, onLogin }) {
             text="Practise from organised question collections."
           />
           <Feature
-            icon={Sparkles}
+            icon={Trophy}
             title="Quiz Arena"
-            text="A dedicated space for quizzes and practice tests, ready for expansion."
+            text="Attempt quizzes and track your practice results."
+          />
+          <Feature
+            icon={NotebookPen}
+            title="Personal Notes"
+            text="Keep your own study notes organised."
+          />
+          <Feature
+            icon={CalendarDays}
+            title="Study Planner"
+            text="Organise academic tasks and due dates."
+          />
+          <Feature
+            icon={MessageCircle}
+            title="Discussions"
+            text="Share academic questions and take part in discussions."
           />
         </div>
       </section>
@@ -692,6 +765,7 @@ function Landing({ onStart, onLogin }) {
         <span>
           © {new Date().getFullYear()} Invertis Hub · Academic Learning Portal
         </span>
+        <small>Designed & Developed by SHOMIQ TECHNOLOGIES</small>
       </footer>
     </div>
   );
@@ -855,10 +929,7 @@ function Overview({
         </div>
 
         {isAdmin && (
-          <button
-            className="btn btn-primary"
-            onClick={onUpload}
-          >
+          <button className="btn btn-primary" onClick={onUpload}>
             <Plus size={17} /> Upload material
           </button>
         )}
@@ -891,6 +962,11 @@ function Overview({
             <Quick icon={ClipboardList} title="Assignments" text="Tasks & resources" onClick={() => onNavigate('assignments')} />
             <Quick icon={FlaskConical} title="Practical Hub" text="Lab manuals & viva" onClick={() => onNavigate('practicals')} />
             <Quick icon={HelpCircle} title="Question Bank" text="Important questions" onClick={() => onNavigate('questions')} />
+            <Quick icon={Trophy} title="Quiz Arena" text="Practice quizzes" onClick={() => onNavigate('quizzes')} />
+            <Quick icon={NotebookPen} title="Personal Notes" text="Your saved notes" onClick={() => onNavigate('notes')} />
+            <Quick icon={CalendarDays} title="Study Planner" text="Organise your tasks" onClick={() => onNavigate('planner')} />
+            <Quick icon={MessageCircle} title="Discussions" text="Academic community" onClick={() => onNavigate('discussions')} />
+            <Quick icon={Bookmark} title="Bookmarks" text="Saved resources" onClick={() => onNavigate('bookmarks')} />
           </div>
         </section>
 
@@ -1304,7 +1380,7 @@ function UsersPage({ users }) {
                       {u.role}
                     </span>
                   </td>
-                  <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                  <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -1320,5 +1396,3 @@ function UsersPage({ users }) {
 }
 
 export default App;
-
-import { AcademicPages } from './AcademicPages.jsx';
