@@ -1,3 +1,4 @@
+
 import express from 'express';
 import mongoose from 'mongoose';
 
@@ -33,7 +34,6 @@ router.use(authenticate);
 // ==========================================
 
 const validId = id => mongoose.isValidObjectId(id);
-
 const getStudentId = req => req.user._id;
 
 const safeText = (value, max = 5000) =>
@@ -91,13 +91,7 @@ const cleanQuiz = quiz => {
 const catalogModels = {
   departments: {
     Model: Department,
-    fields: [
-      'name',
-      'code',
-      'description',
-      'isActive',
-      'sortOrder'
-    ],
+    fields: ['name', 'code', 'description', 'isActive', 'sortOrder'],
     required: ['name'],
     parents: [],
     populate: []
@@ -106,13 +100,8 @@ const catalogModels = {
   courses: {
     Model: Course,
     fields: [
-      'department',
-      'name',
-      'code',
-      'description',
-      'durationYears',
-      'isActive',
-      'sortOrder'
+      'department', 'name', 'code', 'description',
+      'durationYears', 'isActive', 'sortOrder'
     ],
     required: ['department', 'name'],
     parents: [
@@ -124,13 +113,8 @@ const catalogModels = {
   branches: {
     Model: Branch,
     fields: [
-      'department',
-      'course',
-      'name',
-      'code',
-      'description',
-      'isActive',
-      'sortOrder'
+      'department', 'course', 'name', 'code',
+      'description', 'isActive', 'sortOrder'
     ],
     required: ['department', 'course', 'name'],
     parents: [
@@ -143,14 +127,8 @@ const catalogModels = {
   specializations: {
     Model: Specialization,
     fields: [
-      'department',
-      'course',
-      'branch',
-      'name',
-      'code',
-      'description',
-      'isActive',
-      'sortOrder'
+      'department', 'course', 'branch', 'name',
+      'code', 'description', 'isActive', 'sortOrder'
     ],
     required: ['department', 'course', 'name'],
     parents: [
@@ -164,21 +142,10 @@ const catalogModels = {
   'academic-years': {
     Model: AcademicYear,
     fields: [
-      'department',
-      'course',
-      'branch',
-      'specialization',
-      'name',
-      'yearNumber',
-      'isActive',
-      'sortOrder'
+      'department', 'course', 'branch', 'specialization',
+      'name', 'yearNumber', 'isActive', 'sortOrder'
     ],
-    required: [
-      'department',
-      'course',
-      'name',
-      'yearNumber'
-    ],
+    required: ['department', 'course', 'name', 'yearNumber'],
     parents: [
       { field: 'department', Model: Department },
       { field: 'course', Model: Course },
@@ -189,33 +156,19 @@ const catalogModels = {
         optional: true
       }
     ],
-    populate: [
-      'department',
-      'course',
-      'branch',
-      'specialization'
-    ]
+    populate: ['department', 'course', 'branch', 'specialization']
   },
 
   semesters: {
     Model: Semester,
     fields: [
-      'department',
-      'course',
-      'branch',
-      'specialization',
-      'academicYear',
-      'name',
-      'semesterNumber',
-      'isActive',
-      'sortOrder'
+      'department', 'course', 'branch', 'specialization',
+      'academicYear', 'name', 'semesterNumber',
+      'isActive', 'sortOrder'
     ],
     required: [
-      'department',
-      'course',
-      'academicYear',
-      'name',
-      'semesterNumber'
+      'department', 'course', 'academicYear',
+      'name', 'semesterNumber'
     ],
     parents: [
       { field: 'department', Model: Department },
@@ -229,36 +182,21 @@ const catalogModels = {
       { field: 'academicYear', Model: AcademicYear }
     ],
     populate: [
-      'department',
-      'course',
-      'branch',
-      'specialization',
-      'academicYear'
+      'department', 'course', 'branch',
+      'specialization', 'academicYear'
     ]
   },
 
   subjects: {
     Model: Subject,
     fields: [
-      'department',
-      'course',
-      'branch',
-      'specialization',
-      'academicYear',
-      'semester',
-      'name',
-      'code',
-      'description',
-      'credits',
-      'isActive',
-      'sortOrder'
+      'department', 'course', 'branch', 'specialization',
+      'academicYear', 'semester', 'name', 'code',
+      'description', 'credits', 'isActive', 'sortOrder'
     ],
     required: [
-      'department',
-      'course',
-      'academicYear',
-      'semester',
-      'name'
+      'department', 'course', 'academicYear',
+      'semester', 'name'
     ],
     parents: [
       { field: 'department', Model: Department },
@@ -273,39 +211,22 @@ const catalogModels = {
       { field: 'semester', Model: Semester }
     ],
     populate: [
-      'department',
-      'course',
-      'branch',
-      'specialization',
-      'academicYear',
-      'semester'
+      'department', 'course', 'branch',
+      'specialization', 'academicYear', 'semester'
     ]
   },
 
   units: {
     Model: Unit,
     fields: [
-      'department',
-      'course',
-      'branch',
-      'specialization',
-      'academicYear',
-      'semester',
-      'subject',
-      'name',
-      'description',
-      'unitNumber',
-      'topics',
-      'isActive',
-      'sortOrder'
+      'department', 'course', 'branch', 'specialization',
+      'academicYear', 'semester', 'subject', 'name',
+      'description', 'unitNumber', 'topics',
+      'isActive', 'sortOrder'
     ],
     required: [
-      'department',
-      'course',
-      'academicYear',
-      'semester',
-      'subject',
-      'name'
+      'department', 'course', 'academicYear',
+      'semester', 'subject', 'name'
     ],
     parents: [
       { field: 'department', Model: Department },
@@ -321,13 +242,9 @@ const catalogModels = {
       { field: 'subject', Model: Subject }
     ],
     populate: [
-      'department',
-      'course',
-      'branch',
-      'specialization',
-      'academicYear',
-      'semester',
-      'subject'
+      'department', 'course', 'branch',
+      'specialization', 'academicYear',
+      'semester', 'subject'
     ]
   }
 };
@@ -342,33 +259,22 @@ const prepareCatalogData = (config, body) => {
 
     const value = body[field];
 
-    if (
-      ['name', 'code', 'description'].includes(field)
-    ) {
+    if (['name', 'code', 'description'].includes(field)) {
       data[field] = safeText(
         value,
         field === 'description' ? 3000 : 200
       );
     } else if (
       [
-        'department',
-        'course',
-        'branch',
-        'specialization',
-        'academicYear',
-        'semester',
-        'subject'
+        'department', 'course', 'branch', 'specialization',
+        'academicYear', 'semester', 'subject'
       ].includes(field)
     ) {
       data[field] = value || null;
     } else if (
       [
-        'durationYears',
-        'yearNumber',
-        'semesterNumber',
-        'unitNumber',
-        'credits',
-        'sortOrder'
+        'durationYears', 'yearNumber', 'semesterNumber',
+        'unitNumber', 'credits', 'sortOrder'
       ].includes(field)
     ) {
       data[field] = Number(value);
@@ -404,9 +310,7 @@ const validateCatalogData = async (config, data) => {
       return `Invalid ${parent.field}.`;
     }
 
-    const exists = await parent.Model.exists({
-      _id: value
-    });
+    const exists = await parent.Model.exists({ _id: value });
 
     if (!exists) {
       return `${parent.field} was not found.`;
@@ -453,10 +357,7 @@ const validateCatalogData = async (config, data) => {
 
   if (
     data.topics !== undefined &&
-    (
-      !Array.isArray(data.topics) ||
-      data.topics.length > 100
-    )
+    (!Array.isArray(data.topics) || data.topics.length > 100)
   ) {
     return 'Invalid topics list.';
   }
@@ -472,12 +373,10 @@ const populateCatalog = (query, config) => {
   return query;
 };
 
-// Get catalog overview
+// Catalog overview
 router.get('/catalog', async (req, res) => {
   try {
-    const includeInactive = req.user.role === 'admin';
-
-    const filter = includeInactive
+    const filter = req.user.role === 'admin'
       ? {}
       : { isActive: true };
 
@@ -572,9 +471,7 @@ router.get('/catalog/:type', async (req, res) => {
 
     query = populateCatalog(query, config);
 
-    const items = await query;
-
-    res.json({ items });
+    res.json({ items: await query });
   } catch (error) {
     handleError(res, error, 'Could not load catalog.');
   }
@@ -592,16 +489,10 @@ router.post('/catalog/:type', requireAdmin, async (req, res) => {
     }
 
     const data = prepareCatalogData(config, req.body);
-
-    const validationError = await validateCatalogData(
-      config,
-      data
-    );
+    const validationError = await validateCatalogData(config, data);
 
     if (validationError) {
-      return res.status(400).json({
-        message: validationError
-      });
+      return res.status(400).json({ message: validationError });
     }
 
     const item = await config.Model.create(data);
@@ -641,21 +532,12 @@ router.put('/catalog/:type/:id', requireAdmin, async (req, res) => {
     }
 
     const update = prepareCatalogData(config, req.body);
+    const merged = { ...item.toObject(), ...update };
 
-    const merged = {
-      ...item.toObject(),
-      ...update
-    };
-
-    const validationError = await validateCatalogData(
-      config,
-      merged
-    );
+    const validationError = await validateCatalogData(config, merged);
 
     if (validationError) {
-      return res.status(400).json({
-        message: validationError
-      });
+      return res.status(400).json({ message: validationError });
     }
 
     Object.assign(item, update);
@@ -703,7 +585,8 @@ router.delete('/catalog/:type/:id', requireAdmin, async (req, res) => {
         [AcademicYear, 'department'],
         [Semester, 'department'],
         [Subject, 'department'],
-        [Unit, 'department']
+        [Unit, 'department'],
+        [Material, 'departmentRef']
       ],
       courses: [
         [Branch, 'course'],
@@ -711,29 +594,34 @@ router.delete('/catalog/:type/:id', requireAdmin, async (req, res) => {
         [AcademicYear, 'course'],
         [Semester, 'course'],
         [Subject, 'course'],
-        [Unit, 'course']
+        [Unit, 'course'],
+        [Material, 'courseRef']
       ],
       branches: [
         [Specialization, 'branch'],
         [AcademicYear, 'branch'],
         [Semester, 'branch'],
         [Subject, 'branch'],
-        [Unit, 'branch']
+        [Unit, 'branch'],
+        [Material, 'branchRef']
       ],
       specializations: [
         [AcademicYear, 'specialization'],
         [Semester, 'specialization'],
         [Subject, 'specialization'],
-        [Unit, 'specialization']
+        [Unit, 'specialization'],
+        [Material, 'specializationRef']
       ],
       'academic-years': [
         [Semester, 'academicYear'],
         [Subject, 'academicYear'],
-        [Unit, 'academicYear']
+        [Unit, 'academicYear'],
+        [Material, 'academicYearRef']
       ],
       semesters: [
         [Subject, 'semester'],
-        [Unit, 'semester']
+        [Unit, 'semester'],
+        [Material, 'semesterRef']
       ],
       subjects: [
         [Unit, 'subject'],
@@ -770,7 +658,6 @@ router.delete('/catalog/:type/:id', requireAdmin, async (req, res) => {
 // QUIZZES — ADMIN MANAGEMENT
 // ==========================================
 
-// Create quiz
 router.post('/quizzes', requireAdmin, async (req, res) => {
   try {
     const {
@@ -856,7 +743,6 @@ router.post('/quizzes', requireAdmin, async (req, res) => {
   }
 });
 
-// List quizzes
 router.get('/quizzes', async (req, res) => {
   try {
     const filter = {};
@@ -868,15 +754,11 @@ router.get('/quizzes', async (req, res) => {
     }
 
     if (req.query.department) {
-      filter.department = {
-        $in: ['All', req.query.department]
-      };
+      filter.department = { $in: ['All', req.query.department] };
     }
 
     if (req.query.course) {
-      filter.course = {
-        $in: ['All', req.query.course]
-      };
+      filter.course = { $in: ['All', req.query.course] };
     }
 
     if (req.query.semester && validSemester(req.query.semester)) {
@@ -904,7 +786,6 @@ router.get('/quizzes', async (req, res) => {
   }
 });
 
-// View one quiz
 router.get('/quizzes/:id', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -923,7 +804,6 @@ router.get('/quizzes/:id', async (req, res) => {
   }
 });
 
-// Update quiz
 router.put('/quizzes/:id', requireAdmin, async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -931,16 +811,9 @@ router.put('/quizzes/:id', requireAdmin, async (req, res) => {
     }
 
     const allowed = [
-      'title',
-      'description',
-      'department',
-      'course',
-      'semester',
-      'subject',
-      'topic',
-      'durationMinutes',
-      'questions',
-      'status'
+      'title', 'description', 'department', 'course',
+      'semester', 'subject', 'topic', 'durationMinutes',
+      'questions', 'status'
     ];
 
     const update = {};
@@ -1025,7 +898,6 @@ router.put('/quizzes/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Delete quiz
 router.delete('/quizzes/:id', requireAdmin, async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -1210,7 +1082,6 @@ router.post('/attempts/:id/submit', async (req, res) => {
   }
 });
 
-// Student quiz history
 router.get('/my/quiz-history', async (req, res) => {
   try {
     const attempts = await QuizAttempt.find({
@@ -1226,7 +1097,6 @@ router.get('/my/quiz-history', async (req, res) => {
   }
 });
 
-// Detailed result
 router.get('/attempts/:id/result', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -1275,7 +1145,6 @@ router.get('/attempts/:id/result', async (req, res) => {
   }
 });
 
-// Quiz leaderboard
 router.get('/quizzes/:id/leaderboard', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -1766,7 +1635,6 @@ router.post('/discussions/:id/replies', async (req, res) => {
   }
 });
 
-// Report discussion
 router.post('/discussions/:id/report', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -1795,7 +1663,6 @@ router.post('/discussions/:id/report', async (req, res) => {
   }
 });
 
-// Admin moderation
 router.patch('/admin/discussions/:id', requireAdmin, async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -1822,7 +1689,6 @@ router.patch('/admin/discussions/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin: reported discussions
 router.get('/admin/reported-discussions', requireAdmin, async (_req, res) => {
   try {
     const discussions = await Discussion.find({ status: 'reported' })
@@ -1865,7 +1731,6 @@ router.get('/announcements', async (req, res) => {
   }
 });
 
-// Admin: create announcement
 router.post('/announcements', requireAdmin, async (req, res) => {
   try {
     const title = safeText(req.body.title, 200);
@@ -1878,11 +1743,7 @@ router.post('/announcements', requireAdmin, async (req, res) => {
     }
 
     const category = [
-      'general',
-      'academic',
-      'exam',
-      'deadline',
-      'event'
+      'general', 'academic', 'exam', 'deadline', 'event'
     ].includes(req.body.category)
       ? req.body.category
       : 'general';
@@ -1915,7 +1776,8 @@ router.post('/announcements', requireAdmin, async (req, res) => {
       }
 
       if (announcement.targetCourse !== 'All') {
-        userFilter['profile.course'] = announcement.targetCourse;
+        userFilter['profile.course'] =
+          announcement.targetCourse;
       }
 
       if (announcement.targetSemester !== null) {
@@ -1947,7 +1809,6 @@ router.post('/announcements', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin: list announcements
 router.get('/admin/announcements', requireAdmin, async (_req, res) => {
   try {
     const announcements = await Announcement.find()
@@ -1960,7 +1821,6 @@ router.get('/admin/announcements', requireAdmin, async (_req, res) => {
   }
 });
 
-// Admin: update announcement
 router.put('/announcements/:id', requireAdmin, async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -1968,13 +1828,8 @@ router.put('/announcements/:id', requireAdmin, async (req, res) => {
     }
 
     const allowed = [
-      'title',
-      'message',
-      'targetDepartment',
-      'targetCourse',
-      'targetSemester',
-      'category',
-      'published'
+      'title', 'message', 'targetDepartment',
+      'targetCourse', 'targetSemester', 'category', 'published'
     ];
 
     const update = {};
@@ -2011,11 +1866,7 @@ router.put('/announcements/:id', requireAdmin, async (req, res) => {
     if (
       update.category !== undefined &&
       ![
-        'general',
-        'academic',
-        'exam',
-        'deadline',
-        'event'
+        'general', 'academic', 'exam', 'deadline', 'event'
       ].includes(update.category)
     ) {
       return res.status(400).json({ message: 'Invalid category.' });
@@ -2060,7 +1911,6 @@ router.put('/announcements/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin: delete announcement
 router.delete('/announcements/:id', requireAdmin, async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -2106,7 +1956,6 @@ router.get('/notifications', async (req, res) => {
   }
 });
 
-// Mark one notification as read
 router.patch('/notifications/:id/read', async (req, res) => {
   try {
     if (!validId(req.params.id)) {
@@ -2135,7 +1984,6 @@ router.patch('/notifications/:id/read', async (req, res) => {
   }
 });
 
-// Mark all notifications as read
 router.patch('/notifications/read-all', async (req, res) => {
   try {
     await Notification.updateMany(
