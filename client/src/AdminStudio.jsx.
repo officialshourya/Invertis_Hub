@@ -1,0 +1,958 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  LayoutDashboard, Building2, GraduationCap, GitBranch,
+  Layers3, CalendarDays, BookOpen, Library, Search,
+  Plus, Pencil, Trash2, RefreshCw, ChevronDown,
+  ChevronRight, Menu, X, ShieldCheck, Activity,
+  CircleCheck, CircleAlert, FolderTree, Hash,
+  Clock3, ArrowUpRight, Settings2, Filter, Eye,
+  MoreHorizontal
+} from 'lucide-react';
+
+const CATALOG = [
+  { id: 'departments', label: 'Departments', singular: 'Department', icon: Building2 },
+  { id: 'courses', label: 'Courses', singular: 'Course', icon: GraduationCap },
+  { id: 'branches', label: 'Branches', singular: 'Branch', icon: GitBranch },
+  { id: 'specializations', label: 'Specializations', singular: 'Specialization', icon: Layers3 },
+  { id: 'academic-years', label: 'Academic Years', singular: 'Academic Year', icon: CalendarDays },
+  { id: 'semesters', label: 'Semesters', singular: 'Semester', icon: BookOpen },
+  { id: 'subjects', label: 'Subjects', singular: 'Subject', icon: Library },
+  { id: 'units', label: 'Units & Topics', singular: 'Unit', icon: FolderTree }
+];
+
+const EMPTY = {
+  name: '',
+  code: '',
+  description: '',
+  department: '',
+  course: '',
+  branch: '',
+  specialization: '',
+  academicYear: '',
+  semester: '',
+  subject: '',
+  yearNumber: 1,
+  semesterNumber: 1,
+  unitNumber: 1,
+  durationYears: 4,
+  credits: 0,
+  sortOrder: 0,
+  topicsText: '',
+  isActive: true
+};
+
+const PARENT_FIELDS = {
+  courses: ['department'],
+  branches: ['department', 'course'],
+  specializations: ['department', 'course', 'branch'],
+  'academic-years': ['department', 'course', 'branch', 'specialization'],
+  semesters: ['department', 'course', 'branch', 'specialization', 'academicYear'],
+  subjects: ['department', 'course', 'branch', 'specialization', 'academicYear', 'semester'],
+  units: ['department', 'course', 'branch', 'specialization', 'academicYear', 'semester', 'subject']
+};
+
+const FIELD_LABELS = {
+  department: 'Department',
+  course: 'Course',
+  branch: 'Branch',
+  specialization: 'Specialization',
+  academicYear: 'Academic Year',
+  semester: 'Semester',
+  subject: 'Subject'
+};
+
+const parentCatalog = {
+  department: 'departments',
+  course: 'courses',
+  branch: 'branches',
+  specialization: 'specializations',
+  academicYear: 'academic-years',
+  semester: 'semesters',
+  subject: 'subjects'
+};
+
+const getId = value =>
+  typeof value === 'object' && value !== null
+    ? value._id
+    : value || '';
+
+const getName = value =>
+  typeof value === 'object' && value !== null
+    ? value.name || value.code || 'Unnamed'
+    : '';
+
+function AdminStudio({ request, onToast, onBack }) {
+  const [activePage, setActivePage] = useState('overview');
+  const [catalog, setCatalog] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(EMPTY);
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [error, setError] = useState('');
+
+  const notify = useCallback((message, type = 'success') => {
+    if (onToast) {
+      onToast(message, type);
+    } else {
+      window.alert(message);
+    }
+  }, [onToast]);
+
+  const api = useCallback(async (path, options = {}) => {
+    if (!request) {
+      throw new Error('API request function is not connected.');
+    }
+
+    return request(path, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+  }, [request]);
+
+  const loadCatalog = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await api('/api/academic/catalog');
+
+      const normalized = {
+        departments: result.departments || [],
+        courses: result.courses || [],
+        branches: result.branches || [],
+        specializations: result.specializations || [],
+        'academic-years': result.years || [],
+        semesters: result.semesters || [],
+        subjects: result.subjects || [],
+        units: result.units || []
+      };
+
+      setCatalog(normalized);
+    } catch (err) {
+      setError(err.message || 'Unable to load academic catalog.');
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    loadCatalog();
+  }, [loadCatalog]);
+
+  const allRecords = useMemo(
+    () => Object.values(catalog).reduce(
+      (total, records) => total + records.length,
+      0
+    ),
+    [catalog]
+  );
+
+  const totalActive = useMemo(
+    () => Object.values(catalog).reduce(
+      (total, records) =>
+        total + records.filter(item => item.isActive !== false).length,
+      0
+    ),
+    [catalog]
+  );
+
+  const currentConfig = CATALOG.find(item => item.id === activePage);
+  const currentItems = catalog[activePage] || [];
+
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return currentItems.filter(item => {
+      const matchesSearch = !query || [
+        item.name,
+        item.code,
+        item.description,
+        getName(item.department),
+        getName(item.course),
+        getName(item.subject)
+      ].some(value => String(value || '').toLowerCase().includes(query));
+
+      const matchesStatus =
+        activeFilter === 'all' ||
+        (activeFilter === 'active' && item.isActive !== false) ||
+        (activeFilter === 'inactive' && item.isActive === false);
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [currentItems, search, activeFilter]);
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ ...EMPTY });
+    setModalOpen(true);
+  };
+
+  const openEdit = item => {
+    setEditing(item);
+
+    setForm({
+      ...EMPTY,
+      ...item,
+      department: getId(item.department),
+      course: getId(item.course),
+      branch: getId(item.branch),
+      specialization: getId(item.specialization),
+      academicYear: getId(item.academicYear),
+      semester: getId(item.semester),
+      subject: getId(item.subject),
+      topicsText: (item.topics || []).join('\n')
+    });
+
+    setModalOpen(true);
+  };
+
+  const updateField = (field, value) => {
+    setForm(previous => {
+      const next = { ...previous, [field]: value };
+
+      const resetChildren = {
+        department: ['course', 'branch', 'specialization', 'academicYear', 'semester', 'subject'],
+        course: ['branch', 'specialization', 'academicYear', 'semester', 'subject'],
+        branch: ['specialization', 'academicYear', 'semester', 'subject'],
+        specialization: ['academicYear', 'semester', 'subject'],
+        academicYear: ['semester', 'subject'],
+        semester: ['subject']
+      };
+
+      (resetChildren[field] || []).forEach(child => {
+        next[child] = '';
+      });
+
+      return next;
+    });
+  };
+
+  const getParentOptions = field => {
+    const records = catalog[parentCatalog[field]] || [];
+
+    return records.filter(item => {
+      if (item.isActive === false) return false;
+
+      if (field === 'course' && form.department) {
+        return getId(item.department) === form.department;
+      }
+
+      if (field === 'branch' && form.course) {
+        return getId(item.course) === form.course;
+      }
+
+      if (field === 'specialization' && form.course) {
+        return getId(item.course) === form.course &&
+          (!form.branch || getId(item.branch) === form.branch);
+      }
+
+      if (field === 'academicYear' && form.course) {
+        return getId(item.course) === form.course &&
+          (!form.branch || getId(item.branch) === form.branch) &&
+          (!form.specialization || getId(item.specialization) === form.specialization);
+      }
+
+      if (field === 'semester' && form.academicYear) {
+        return getId(item.academicYear) === form.academicYear;
+      }
+
+      if (field === 'subject' && form.semester) {
+        return getId(item.semester) === form.semester;
+      }
+
+      return true;
+    });
+  };
+
+  const saveRecord = async event => {
+    event.preventDefault();
+    if (!currentConfig || saving) return;
+
+    setSaving(true);
+
+    try {
+      const payload = { ...form };
+      delete payload.topicsText;
+
+      if (activePage === 'units') {
+        payload.topics = form.topicsText
+          .split('\n')
+          .map(topic => topic.trim())
+          .filter(Boolean);
+      }
+
+      const method = editing ? 'PUT' : 'POST';
+      const path = editing
+        ? `/api/academic/catalog/${activePage}/${editing._id}`
+        : `/api/academic/catalog/${activePage}`;
+
+      await api(path, {
+        method,
+        body: JSON.stringify(payload)
+      });
+
+      setModalOpen(false);
+      notify(`${currentConfig.singular} ${editing ? 'updated' : 'created'} successfully.`);
+      await loadCatalog();
+    } catch (err) {
+      notify(err.message || 'Could not save record.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteRecord = async item => {
+    if (!window.confirm(`Delete "${item.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await api(`/api/academic/catalog/${activePage}/${item._id}`, {
+        method: 'DELETE'
+      });
+
+      notify('Record deleted successfully.');
+      await loadCatalog();
+    } catch (err) {
+      notify(err.message || 'Unable to delete record.', 'error');
+    }
+  };
+
+  const toggleStatus = async item => {
+    try {
+      await api(`/api/academic/catalog/${activePage}/${item._id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isActive: item.isActive === false })
+      });
+
+      notify('Record status updated.');
+      await loadCatalog();
+    } catch (err) {
+      notify(err.message || 'Unable to update status.', 'error');
+    }
+  };
+
+  const navItems = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'departments', label: 'Departments', icon: Building2 },
+    { id: 'courses', label: 'Courses', icon: GraduationCap },
+    { id: 'branches', label: 'Branches', icon: GitBranch },
+    { id: 'specializations', label: 'Specializations', icon: Layers3 },
+    { id: 'academic-years', label: 'Academic Years', icon: CalendarDays },
+    { id: 'semesters', label: 'Semesters', icon: BookOpen },
+    { id: 'subjects', label: 'Subjects', icon: Library },
+    { id: 'units', label: 'Units & Topics', icon: FolderTree }
+  ];
+
+  const renderParentField = field => (
+    <label className="as-field" key={field}>
+      <span>{FIELD_LABELS[field]} <b>*</b></span>
+      <select
+        value={form[field] || ''}
+        onChange={event => updateField(field, event.target.value)}
+        required={!['branch', 'specialization'].includes(field)}
+      >
+        <option value="">Select {FIELD_LABELS[field]}</option>
+        {getParentOptions(field).map(item => (
+          <option value={item._id} key={item._id}>
+            {item.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
+  const renderInput = (label, field, type = 'text', required = false) => (
+    <label className="as-field" key={field}>
+      <span>{label} {required && <b>*</b>}</span>
+      <input
+        type={type}
+        value={form[field] ?? ''}
+        onChange={event => updateField(
+          field,
+          type === 'number' ? Number(event.target.value) : event.target.value
+        )}
+        required={required}
+        min={type === 'number' ? 0 : undefined}
+      />
+    </label>
+  );
+
+  const renderFormFields = () => {
+    const parents = PARENT_FIELDS[activePage] || [];
+
+    return (
+      <>
+        {parents.map(renderParentField)}
+
+        {renderInput('Name', 'name', 'text', true)}
+
+        {activePage !== 'departments' &&
+          activePage !== 'academic-years' &&
+          activePage !== 'semesters' &&
+          activePage !== 'units' &&
+          renderInput('Code', 'code')}
+
+        {activePage === 'courses' &&
+          renderInput('Duration (Years)', 'durationYears', 'number')}
+
+        {activePage === 'academic-years' &&
+          renderInput('Year Number', 'yearNumber', 'number', true)}
+
+        {activePage === 'semesters' &&
+          renderInput('Semester Number', 'semesterNumber', 'number', true)}
+
+        {activePage === 'units' &&
+          renderInput('Unit Number', 'unitNumber', 'number', true)}
+
+        {activePage === 'subjects' &&
+          renderInput('Credits', 'credits', 'number')}
+
+        <label className="as-field as-full">
+          <span>Description</span>
+          <textarea
+            rows="3"
+            value={form.description}
+            onChange={event => updateField('description', event.target.value)}
+            placeholder="Write a short description..."
+          />
+        </label>
+
+        {activePage === 'units' && (
+          <label className="as-field as-full">
+            <span>Topics (one topic per line)</span>
+            <textarea
+              rows="5"
+              value={form.topicsText}
+              onChange={event => updateField('topicsText', event.target.value)}
+              placeholder={'Introduction\nFundamentals\nApplications'}
+            />
+          </label>
+        )}
+
+        <label className="as-field">
+          <span>Display Order</span>
+          <input
+            type="number"
+            min="0"
+            value={form.sortOrder}
+            onChange={event => updateField('sortOrder', Number(event.target.value))}
+          />
+        </label>
+
+        <label className="as-switch">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={event => updateField('isActive', event.target.checked)}
+          />
+          <span className="as-switch-track" />
+          <span>Active record</span>
+        </label>
+      </>
+    );
+  };
+
+  const renderOverview = () => (
+    <>
+      <div className="as-welcome">
+        <div>
+          <div className="as-eyebrow">ADMINISTRATION / OVERVIEW</div>
+          <h1>Admin Overview</h1>
+          <p>Manage your university's academic structure from one place.</p>
+        </div>
+        <div className="as-welcome-icon"><ShieldCheck size={34} /></div>
+      </div>
+
+      <div className="as-stats">
+        <div className="as-stat-card">
+          <span className="as-stat-icon purple"><FolderTree /></span>
+          <span className="as-stat-label">Total Records</span>
+          <strong>{allRecords}</strong>
+          <small>Across all categories</small>
+        </div>
+        <div className="as-stat-card">
+          <span className="as-stat-icon green"><CircleCheck /></span>
+          <span className="as-stat-label">Active Records</span>
+          <strong>{totalActive}</strong>
+          <small>Currently available</small>
+        </div>
+        <div className="as-stat-card">
+          <span className="as-stat-icon blue"><Building2 /></span>
+          <span className="as-stat-label">Departments</span>
+          <strong>{(catalog.departments || []).length}</strong>
+          <small>Academic departments</small>
+        </div>
+        <div className="as-stat-card">
+          <span className="as-stat-icon orange"><BookOpen /></span>
+          <span className="as-stat-label">Subjects</span>
+          <strong>{(catalog.subjects || []).length}</strong>
+          <small>Academic subjects</small>
+        </div>
+      </div>
+
+      <div className="as-section-heading">
+        <div>
+          <h2>Academic Management</h2>
+          <p>Choose a category to manage its records.</p>
+        </div>
+        <span className="as-count">{CATALOG.length} modules</span>
+      </div>
+
+      <div className="as-module-grid">
+        {CATALOG.map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <button
+              className="as-module-card"
+              key={item.id}
+              onClick={() => {
+                setActivePage(item.id);
+                setSearch('');
+                setActiveFilter('all');
+              }}
+            >
+              <span className={`as-module-icon tone-${index % 5}`}>
+                <Icon size={21} />
+              </span>
+              <span className="as-module-info">
+                <strong>{item.label}</strong>
+                <small>{(catalog[item.id] || []).length} records</small>
+              </span>
+              <ArrowUpRight size={18} className="as-module-arrow" />
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="as-bottom-grid">
+        <div className="as-panel">
+          <div className="as-panel-heading">
+            <div>
+              <h3>Recent Academic Records</h3>
+              <p>Latest records added to the catalog</p>
+            </div>
+            <Clock3 size={19} />
+          </div>
+          {Object.entries(catalog)
+            .flatMap(([type, records]) =>
+              records.map(record => ({ ...record, catalogType: type }))
+            )
+            .sort((a, b) =>
+              new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+            )
+            .slice(0, 5)
+            .map(record => (
+              <div className="as-recent-row" key={record._id}>
+                <span className="as-recent-dot" />
+                <div>
+                  <strong>{record.name}</strong>
+                  <small>{CATALOG.find(item => item.id === record.catalogType)?.label}</small>
+                </div>
+                <span className={`as-status ${record.isActive === false ? 'off' : ''}`}>
+                  {record.isActive === false ? 'Inactive' : 'Active'}
+                </span>
+              </div>
+            ))}
+          {!allRecords && <div className="as-empty-small">No academic records yet.</div>}
+        </div>
+
+        <div className="as-panel as-quick-panel">
+          <div className="as-panel-heading">
+            <div>
+              <h3>Quick Actions</h3>
+              <p>Common administration tasks</p>
+            </div>
+            <Activity size={19} />
+          </div>
+          <button onClick={() => setActivePage('departments')}>
+            <Building2 size={18} /> Manage Departments <ChevronRight size={17} />
+          </button>
+          <button onClick={() => setActivePage('courses')}>
+            <GraduationCap size={18} /> Manage Courses <ChevronRight size={17} />
+          </button>
+          <button onClick={() => setActivePage('subjects')}>
+            <BookOpen size={18} /> Manage Subjects <ChevronRight size={17} />
+          </button>
+          <button onClick={() => setActivePage('units')}>
+            <FolderTree size={18} /> Manage Units <ChevronRight size={17} />
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  const renderCatalogPage = () => {
+    const Icon = currentConfig?.icon || Library;
+
+    return (
+      <>
+        <div className="as-page-heading">
+          <div>
+            <div className="as-eyebrow">ACADEMIC MANAGEMENT / {currentConfig?.label.toUpperCase()}</div>
+            <h1>{currentConfig?.label}</h1>
+            <p>Create, edit and organize your academic records.</p>
+          </div>
+          <button className="as-primary-btn" onClick={openCreate}>
+            <Plus size={18} /> Add {currentConfig?.singular}
+          </button>
+        </div>
+
+        <div className="as-list-summary">
+          <div className="as-list-summary-icon"><Icon size={22} /></div>
+          <div>
+            <strong>{currentItems.length} Total Records</strong>
+            <small>{currentItems.filter(item => item.isActive !== false).length} active · {currentItems.filter(item => item.isActive === false).length} inactive</small>
+          </div>
+        </div>
+
+        <div className="as-toolbar">
+          <div className="as-search">
+            <Search size={18} />
+            <input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder={`Search ${currentConfig?.label.toLowerCase()}...`}
+            />
+            {search && <button onClick={() => setSearch('')}><X size={16} /></button>}
+          </div>
+          <div className="as-filter">
+            <Filter size={16} />
+            <select value={activeFilter} onChange={event => setActiveFilter(event.target.value)}>
+              <option value="all">All Records</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            <ChevronDown size={15} />
+          </div>
+          <button className="as-icon-btn" title="Refresh" onClick={loadCatalog}>
+            <RefreshCw size={17} />
+          </button>
+        </div>
+
+        <div className="as-table-wrap">
+          <table className="as-table">
+            <thead>
+              <tr>
+                <th>Name / Details</th>
+                <th>Code</th>
+                <th>Academic Parent</th>
+                <th>Status</th>
+                <th className="as-actions-head">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredItems.map(item => (
+                <tr key={item._id}>
+                  <td>
+                    <div className="as-record-name">
+                      <span className="as-record-avatar">
+                        {(item.name || '?').charAt(0).toUpperCase()}
+                      </span>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <small>{item.description || 'No description added'}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span className="as-code">{item.code || '—'}</span></td>
+                  <td>
+                    <div className="as-parent-info">
+                      {getName(item.subject) ||
+                        getName(item.semester) ||
+                        getName(item.academicYear) ||
+                        getName(item.course) ||
+                        getName(item.department) ||
+                        '—'}
+                    </div>
+                  </td>
+                  <td>
+                    <button
+                      className={`as-status ${item.isActive === false ? 'off' : ''}`}
+                      onClick={() => toggleStatus(item)}
+                    >
+                      <span /> {item.isActive === false ? 'Inactive' : 'Active'}
+                    </button>
+                  </td>
+                  <td>
+                    <div className="as-row-actions">
+                      <button title="Edit" onClick={() => openEdit(item)}>
+                        <Pencil size={16} />
+                      </button>
+                      <button title="Delete" className="danger" onClick={() => deleteRecord(item)}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {!filteredItems.length && (
+            <div className="as-empty">
+              <span><Icon size={30} /></span>
+              <h3>No records found</h3>
+              <p>{search ? 'Try a different search term.' : 'Start by adding your first record.'}</p>
+              {!search && (
+                <button className="as-primary-btn" onClick={openCreate}>
+                  <Plus size={17} /> Add {currentConfig?.singular}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  return (
+    <div className="admin-studio">
+      <style>{`
+        .admin-studio{--as-navy:#111b3c;--as-blue:#4356d9;--as-text:#17213c;--as-muted:#77819a;--as-line:#e8ebf3;min-height:100vh;background:#f5f6fb;color:var(--as-text);display:flex;font-family:Inter,system-ui,-apple-system,sans-serif}
+        .admin-studio *{box-sizing:border-box}
+        .as-sidebar{width:260px;background:linear-gradient(180deg,#111a38,#18234b);color:#fff;display:flex;flex-direction:column;flex-shrink:0;min-height:100vh;padding:24px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:30}
+        .as-brand{display:flex;align-items:center;gap:12px;padding:0 10px 26px;border-bottom:1px solid #ffffff19}
+        .as-brand-mark{width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,#7d8cff,#4859d6);display:grid;place-items:center;box-shadow:0 7px 20px #5264e54a}
+        .as-brand strong{display:block;font-size:15px;letter-spacing:.2px}
+        .as-brand small{display:block;color:#aab4d2;font-size:10px;margin-top:4px;letter-spacing:1.5px}
+        .as-sidebar-label{font-size:10px;color:#8895b9;letter-spacing:1.5px;font-weight:800;padding:25px 12px 10px}
+        .as-nav{display:flex;flex-direction:column;gap:5px}
+        .as-nav button{border:0;background:transparent;color:#b9c3df;display:flex;align-items:center;gap:12px;text-align:left;padding:11px 12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:.2s;width:100%}
+        .as-nav button:hover{background:#ffffff12;color:white}
+        .as-nav button.active{background:linear-gradient(100deg,#4b5bd9,#5668e8);color:white;box-shadow:0 6px 18px #4054d944}
+        .as-nav button span{flex:1}
+        .as-nav button small{font-size:10px;background:#ffffff18;padding:3px 7px;border-radius:20px}
+        .as-sidebar-bottom{margin-top:auto;padding-top:20px}
+        .as-admin-card{padding:13px;background:#ffffff0e;border:1px solid #ffffff17;border-radius:12px;display:flex;align-items:center;gap:10px}
+        .as-admin-avatar{width:34px;height:34px;border-radius:50%;background:#5264df;display:grid;place-items:center;font-size:13px;font-weight:800}
+        .as-admin-card strong{font-size:12px;display:block}
+        .as-admin-card small{font-size:10px;color:#aeb9d7}
+        .as-main{min-width:0;flex:1}
+        .as-topbar{height:70px;background:white;border-bottom:1px solid var(--as-line);display:flex;align-items:center;justify-content:space-between;padding:0 32px;position:sticky;top:0;z-index:20}
+        .as-topbar-left,.as-topbar-right{display:flex;align-items:center;gap:13px}
+        .as-topbar-label{font-size:12px;color:var(--as-muted)}
+        .as-topbar-label strong{color:var(--as-text)}
+        .as-secure{display:flex;align-items:center;gap:7px;color:#25845b;background:#eaf8f1;border:1px solid #d5f0e2;border-radius:30px;padding:7px 11px;font-size:11px;font-weight:700}
+        .as-content{padding:30px 34px 50px;max-width:1500px;margin:auto}
+        .as-eyebrow{font-size:10px;font-weight:800;letter-spacing:1.5px;color:#6673cf;margin-bottom:10px}
+        .as-welcome{background:linear-gradient(110deg,#18234b,#3549a8);border-radius:18px;padding:30px 34px;color:white;display:flex;align-items:center;justify-content:space-between;overflow:hidden;position:relative}
+        .as-welcome:after{content:"";position:absolute;width:240px;height:240px;border:1px solid #ffffff20;border-radius:50%;right:70px;top:-120px;box-shadow:0 0 0 35px #ffffff08,0 0 0 70px #ffffff05}
+        .as-welcome .as-eyebrow{color:#b9c5ff}
+        .as-welcome h1{font-size:27px;margin:0 0 8px;font-weight:800;letter-spacing:-.7px}
+        .as-welcome p{margin:0;color:#d1d8f4;font-size:13px}
+        .as-welcome-icon{width:65px;height:65px;border-radius:18px;background:#ffffff18;display:grid;place-items:center;z-index:1}
+        .as-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:22px 0 30px}
+        .as-stat-card{background:white;border:1px solid var(--as-line);border-radius:14px;padding:19px;position:relative;min-width:0}
+        .as-stat-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:11px;margin-bottom:15px}
+        .as-stat-icon svg{width:19px}
+        .as-stat-icon.purple{background:#f0edff;color:#7662d9}.as-stat-icon.green{background:#e9f8f0;color:#269968}.as-stat-icon.blue{background:#eaf1ff;color:#4770db}.as-stat-icon.orange{background:#fff2e7;color:#e58c3f}
+        .as-stat-label{font-size:11px;color:var(--as-muted);display:block;font-weight:600}
+        .as-stat-card strong{font-size:27px;display:block;margin:5px 0 3px;letter-spacing:-1px}
+        .as-stat-card small{font-size:10px;color:#9aa2b5}
+        .as-section-heading,.as-panel-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+        .as-section-heading{margin-bottom:15px}
+        .as-section-heading h2{font-size:17px;margin:0 0 5px}.as-section-heading p,.as-panel-heading p{font-size:11px;color:var(--as-muted);margin:0}
+        .as-count{background:#e9ecff;color:#4b5bd0;padding:6px 10px;border-radius:30px;font-size:10px;font-weight:800}
+        .as-module-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+        .as-module-card{border:1px solid var(--as-line);background:white;border-radius:13px;padding:16px;display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer;transition:.2s;min-width:0}
+        .as-module-card:hover{border-color:#b9c1ff;transform:translateY(-2px);box-shadow:0 8px 20px #293b7810}
+        .as-module-icon{width:39px;height:39px;flex-shrink:0;border-radius:11px;display:grid;place-items:center}
+        .tone-0{background:#eeedff;color:#6759d3}.tone-1{background:#eaf2ff;color:#4472d9}.tone-2{background:#e7f8f2;color:#269b71}.tone-3{background:#fff0e9;color:#dc8151}.tone-4{background:#f8edf8;color:#ad5ba8}
+        .as-module-info{min-width:0;flex:1}.as-module-info strong{font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.as-module-info small{display:block;color:var(--as-muted);font-size:10px;margin-top:5px}
+        .as-module-arrow{color:#a1a9ba;flex-shrink:0}
+        .as-bottom-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:15px;margin-top:20px}
+        .as-panel{background:white;border:1px solid var(--as-line);border-radius:14px;padding:20px;min-width:0}
+        .as-panel-heading{margin-bottom:16px}.as-panel-heading h3{font-size:14px;margin:0 0 5px}.as-panel-heading>svg{color:#7885cb}
+        .as-recent-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid #f0f1f6}
+        .as-recent-dot{width:8px;height:8px;background:#5d6ee4;border-radius:50%;flex-shrink:0}
+        .as-recent-row>div{flex:1;min-width:0}.as-recent-row strong{font-size:12px;display:block}.as-recent-row small{font-size:10px;color:var(--as-muted);display:block;margin-top:3px}
+        .as-status{border:0;border-radius:30px;background:#eaf8f0;color:#238454;padding:6px 9px;font-size:10px;font-weight:800;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer}
+        .as-status span{width:6px;height:6px;border-radius:50%;background:#28a66b}
+        .as-status.off{background:#fff0ef;color:#c05a55}.as-status.off span{background:#d86b64}
+        .as-quick-panel button{width:100%;border:0;border-top:1px solid #f0f1f6;background:white;padding:13px 2px;display:flex;align-items:center;gap:10px;color:#44516c;font-size:12px;font-weight:600;cursor:pointer;text-align:left}
+        .as-quick-panel button svg:last-child{margin-left:auto;color:#a3abc0}.as-quick-panel button:hover{color:#4b5bd0}
+        .as-page-heading{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:22px}
+        .as-page-heading h1{font-size:26px;margin:0 0 7px;letter-spacing:-.7px}.as-page-heading p{font-size:12px;color:var(--as-muted);margin:0}
+        .as-primary-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:9px;background:#485bd5;color:white;padding:11px 15px;font-size:12px;font-weight:750;cursor:pointer;box-shadow:0 5px 12px #485bd52a;transition:.2s}
+        .as-primary-btn:hover{background:#3548bf;transform:translateY(-1px)}
+        .as-list-summary{display:flex;align-items:center;gap:12px;background:white;border:1px solid var(--as-line);border-radius:13px;padding:15px 18px;margin-bottom:15px}
+        .as-list-summary-icon{width:40px;height:40px;border-radius:11px;background:#eef0ff;color:#5969d8;display:grid;place-items:center}
+        .as-list-summary strong{display:block;font-size:13px}.as-list-summary small{display:block;color:var(--as-muted);font-size:10px;margin-top:4px}
+        .as-toolbar{display:flex;gap:10px;margin-bottom:13px}
+        .as-search{height:42px;background:white;border:1px solid var(--as-line);border-radius:9px;display:flex;align-items:center;gap:9px;padding:0 12px;flex:1;min-width:100px;color:#8b94a9}
+        .as-search input{border:0;outline:0;flex:1;min-width:0;font-size:12px;color:var(--as-text);background:transparent}
+        .as-search button{border:0;background:transparent;color:#8891a5;cursor:pointer}
+        .as-filter{height:42px;display:flex;align-items:center;gap:7px;padding:0 10px;background:white;border:1px solid var(--as-line);border-radius:9px;color:#818ba1}
+        .as-filter select{appearance:none;border:0;background:transparent;outline:0;font-size:11px;color:#4c5871;cursor:pointer}
+        .as-icon-btn{width:42px;height:42px;border:1px solid var(--as-line);border-radius:9px;background:white;color:#65718d;display:grid;place-items:center;cursor:pointer}
+        .as-table-wrap{background:white;border:1px solid var(--as-line);border-radius:13px;overflow:auto}
+        .as-table{width:100%;border-collapse:collapse;min-width:720px}
+        .as-table th{text-align:left;padding:14px 16px;background:#fafbfe;color:#8790a6;font-size:9px;text-transform:uppercase;letter-spacing:1px;font-weight:800;border-bottom:1px solid var(--as-line)}
+        .as-table td{padding:13px 16px;border-bottom:1px solid #f0f1f6;font-size:11px;color:#59647d}
+        .as-table tbody tr:last-child td{border-bottom:0}.as-table tbody tr:hover{background:#fcfcff}
+        .as-record-name{display:flex;align-items:center;gap:10px;min-width:180px}
+        .as-record-avatar{width:33px;height:33px;border-radius:10px;background:#edf0ff;color:#5264d7;display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0}
+        .as-record-name strong{display:block;color:#26314c;font-size:11px}.as-record-name small{display:block;color:#9ba3b4;font-size:9px;margin-top:4px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .as-code{font-family:monospace;background:#f3f4f8;padding:5px 7px;border-radius:5px;color:#66718b;font-size:10px}
+        .as-parent-info{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .as-actions-head{text-align:right!important}.as-row-actions{display:flex;justify-content:flex-end;gap:6px}
+        .as-row-actions button{width:30px;height:30px;border:1px solid #e9ebf2;border-radius:7px;background:white;color:#66718b;display:grid;place-items:center;cursor:pointer}
+        .as-row-actions button:hover{background:#eef0ff;color:#4b5bd0;border-color:#dce0ff}
+        .as-row-actions button.danger:hover{background:#fff0ef;color:#d45b56;border-color:#ffdcda}
+        .as-empty{text-align:center;padding:55px 15px}.as-empty>span{width:55px;height:55px;border-radius:16px;background:#f0f1ff;color:#6572d7;display:grid;place-items:center;margin:0 auto 14px}
+        .as-empty h3{font-size:15px;margin:0 0 6px}.as-empty p,.as-empty-small{font-size:11px;color:var(--as-muted);margin:0 0 17px}
+        .as-empty-small{padding:18px 0 5px;margin:0}
+        .as-modal-backdrop{position:fixed;inset:0;background:#10182d99;z-index:100;display:grid;place-items:center;padding:18px;backdrop-filter:blur(4px)}
+        .as-modal{background:white;width:min(650px,100%);max-height:90vh;overflow:auto;border-radius:17px;box-shadow:0 25px 80px #111b3c35}
+        .as-modal-header{padding:21px 24px;border-bottom:1px solid var(--as-line);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:2}
+        .as-modal-header h2{font-size:17px;margin:0 0 5px}.as-modal-header p{font-size:10px;color:var(--as-muted);margin:0}
+        .as-modal-close{width:33px;height:33px;border:1px solid var(--as-line);background:white;border-radius:8px;display:grid;place-items:center;cursor:pointer;color:#6d7891}
+        .as-form{padding:22px 24px}.as-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+        .as-field{display:flex;flex-direction:column;gap:7px;min-width:0}.as-field>span{font-size:11px;font-weight:750;color:#4b5670}.as-field b{color:#df6862}
+        .as-field input,.as-field select,.as-field textarea{width:100%;border:1px solid #e2e6ef;border-radius:8px;padding:10px 11px;outline:0;background:#fff;color:#26314c;font:inherit;font-size:12px;min-width:0}
+        .as-field input:focus,.as-field select:focus,.as-field textarea:focus{border-color:#7180e7;box-shadow:0 0 0 3px #6575e51a}
+        .as-field textarea{resize:vertical}.as-full{grid-column:1/-1}
+        .as-switch{display:flex;align-items:center;gap:9px;align-self:end;padding:10px 0;font-size:11px;font-weight:650;color:#526078;cursor:pointer}
+        .as-switch input{position:absolute;opacity:0}.as-switch-track{width:34px;height:19px;background:#cbd1de;border-radius:20px;position:relative;transition:.2s}
+        .as-switch-track:after{content:"";position:absolute;width:13px;height:13px;background:white;border-radius:50%;left:3px;top:3px;transition:.2s}
+        .as-switch input:checked+.as-switch-track{background:#4e62d9}.as-switch input:checked+.as-switch-track:after{transform:translateX(15px)}
+        .as-modal-footer{display:flex;justify-content:flex-end;gap:9px;padding:16px 24px;border-top:1px solid var(--as-line);position:sticky;bottom:0;background:white}
+        .as-secondary-btn{border:1px solid var(--as-line);background:white;border-radius:9px;padding:10px 15px;font-size:11px;font-weight:700;color:#63708a;cursor:pointer}
+        .as-mobile-menu{display:none;border:0;background:transparent;color:#34405e;cursor:pointer}
+        .as-error{padding:13px 15px;background:#fff0ef;border:1px solid #ffdedb;border-radius:10px;color:#b74e49;font-size:12px;margin-bottom:15px;display:flex;gap:9px;align-items:center}
+        @media(max-width:1100px){.as-sidebar{width:225px}.as-content{padding:25px 22px}.as-module-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.as-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        @media(max-width:760px){.admin-studio{display:block}.as-sidebar{position:fixed;left:-270px;top:0;height:100dvh;width:260px;transition:left .25s;box-shadow:10px 0 30px #111b3c22}.as-sidebar.open{left:0}.as-mobile-menu{display:grid;place-items:center}.as-topbar{height:60px;padding:0 15px}.as-content{padding:20px 14px 35px}.as-secure{font-size:0;padding:8px}.as-secure svg{width:17px}.as-welcome{padding:23px 20px}.as-welcome h1{font-size:22px}.as-welcome p{font-size:11px;max-width:230px;line-height:1.6}.as-welcome-icon{width:48px;height:48px}.as-stats{gap:9px;margin:15px 0 24px}.as-stat-card{padding:14px}.as-stat-card strong{font-size:23px}.as-module-grid{gap:9px}.as-module-card{padding:12px;gap:8px}.as-module-icon{width:34px;height:34px}.as-module-info strong{font-size:10px}.as-bottom-grid{grid-template-columns:1fr}.as-page-heading{align-items:flex-start;flex-direction:column}.as-page-heading h1{font-size:23px}.as-toolbar{flex-wrap:wrap}.as-search{flex-basis:100%}.as-filter{flex:1}.as-modal-backdrop{padding:9px}.as-modal{max-height:94vh}.as-form{padding:17px}.as-form-grid{gap:12px}.as-modal-header{padding:17px}.as-modal-footer{padding:13px 17px}}
+        @media(max-width:390px){.as-module-grid{grid-template-columns:1fr}.as-stats{grid-template-columns:1fr 1fr}.as-form-grid{grid-template-columns:1fr}.as-full{grid-column:auto}.as-welcome-icon{display:none}}
+      `}</style>
+
+      <aside className={`as-sidebar ${mobileMenu ? 'open' : ''}`}>
+        <div className="as-brand">
+          <div className="as-brand-mark"><GraduationCap size={24} /></div>
+          <div>
+            <strong>INVERTIS HUB</strong>
+            <small>ADMIN STUDIO</small>
+          </div>
+        </div>
+
+        <div className="as-sidebar-label">WORKSPACE</div>
+        <nav className="as-nav">
+          {navItems.map(item => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                className={activePage === item.id ? 'active' : ''}
+                onClick={() => {
+                  setActivePage(item.id);
+                  setSearch('');
+                  setActiveFilter('all');
+                  setMobileMenu(false);
+                }}
+              >
+                <Icon size={17} />
+                <span>{item.label}</span>
+                {item.id !== 'overview' && (
+                  <small>{(catalog[item.id] || []).length}</small>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="as-sidebar-bottom">
+          <div className="as-admin-card">
+            <div className="as-admin-avatar">A</div>
+            <div>
+              <strong>Administrator</strong>
+              <small>Authorized access</small>
+            </div>
+            <ShieldCheck size={16} style={{ marginLeft: 'auto', color: '#8f9cff' }} />
+          </div>
+        </div>
+      </aside>
+
+      <main className="as-main">
+        <header className="as-topbar">
+          <div className="as-topbar-left">
+            <button className="as-mobile-menu" onClick={() => setMobileMenu(!mobileMenu)}>
+              {mobileMenu ? <X size={21} /> : <Menu size={21} />}
+            </button>
+            <div className="as-topbar-label">
+              Invertis Hub <strong>/ Admin Studio</strong>
+            </div>
+          </div>
+          <div className="as-topbar-right">
+            <span className="as-secure"><ShieldCheck size={14} /> Secure Admin</span>
+            {onBack && (
+              <button className="as-secondary-btn" onClick={onBack}>Exit Studio</button>
+            )}
+          </div>
+        </header>
+
+        <div className="as-content">
+          {error && (
+            <div className="as-error">
+              <CircleAlert size={17} />
+              <span>{error}</span>
+              <button className="as-secondary-btn" onClick={loadCatalog}>Retry</button>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="as-empty">
+              <RefreshCw size={28} />
+              <h3>Loading Admin Studio</h3>
+              <p>Fetching academic catalog...</p>
+            </div>
+          ) : activePage === 'overview' ? (
+            renderOverview()
+          ) : (
+            renderCatalogPage()
+          )}
+        </div>
+      </main>
+
+      {modalOpen && (
+        <div className="as-modal-backdrop" onMouseDown={event => {
+          if (event.target === event.currentTarget) setModalOpen(false);
+        }}>
+          <section className="as-modal">
+            <div className="as-modal-header">
+              <div>
+                <h2>{editing ? `Edit ${currentConfig?.singular}` : `Add ${currentConfig?.singular}`}</h2>
+                <p>Enter the academic information below.</p>
+              </div>
+              <button className="as-modal-close" onClick={() => setModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form className="as-form" onSubmit={saveRecord}>
+              <div className="as-form-grid">
+                {renderFormFields()}
+              </div>
+              <div className="as-modal-footer">
+                <button type="button" className="as-secondary-btn" onClick={() => setModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="as-primary-btn" disabled={saving}>
+                  {saving ? 'Saving...' : <><Plus size={16} /> {editing ? 'Save Changes' : 'Create Record'}</>}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default AdminStudio;
